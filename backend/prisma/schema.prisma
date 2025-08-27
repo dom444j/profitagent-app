@@ -1,0 +1,385 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Enums
+enum UserRole {
+  user
+  admin
+}
+
+enum UserStatus {
+  active
+  suspended
+  deleted
+}
+
+enum OrderStatus {
+  pending
+  expired
+  paid
+  confirmed
+  canceled
+}
+
+enum LicenseStatus {
+  active
+  paused
+  completed
+  canceled
+}
+
+enum CommissionStatus {
+  pending
+  released
+  canceled
+}
+
+enum BonusStatus {
+  pending
+  released
+  canceled
+}
+
+enum WithdrawalStatus {
+  requested
+  otp_sent
+  otp_verified
+  approved
+  paid
+  rejected
+  canceled
+  expired
+}
+
+enum LedgerDirection {
+  credit
+  debit
+}
+
+enum LedgerRefType {
+  order
+  license
+  earning
+  referral_commission
+  bonus
+  withdrawal
+  admin_adjustment
+  system
+}
+
+enum NotificationType {
+  withdrawal
+  order
+  earning
+  system
+  security
+  bonus
+  referral
+}
+
+enum NotificationSeverity {
+  info
+  success
+  warning
+  error
+}
+
+// Models
+model User {
+  id                    String     @id @default(cuid())
+  email                 String     @unique
+  password_hash         String
+  role                  UserRole   @default(user)
+  status                UserStatus @default(active)
+  ref_code              String     @unique
+  sponsor_id            String?
+  usdt_bep20_address    String?
+  telegram_user_id      String?    @unique
+  telegram_link_status  String?
+  first_name            String?
+  last_name             String?
+  phone                 String?
+  created_at            DateTime   @default(now())
+  updated_at            DateTime   @updatedAt
+
+  // Relations
+  sponsor                           User?                 @relation("UserSponsor", fields: [sponsor_id], references: [id])
+  sponsored                         User[]                @relation("UserSponsor")
+  orders                            OrderDeposit[]
+  licenses                          UserLicense[]
+  withdrawals                       Withdrawal[]
+  ledger_entries                    LedgerEntry[]
+  referral_commissions_sponsor      ReferralCommission[]  @relation("SponsorRef")
+  referral_commissions_referred     ReferralCommission[]  @relation("ReferredRef")
+  audit_logs                        AuditLog[]            @relation("ActorLogs")
+  bonuses_received                  Bonus[]               @relation("BonusReceiver")
+  bonuses_created                   Bonus[]               @relation("BonusCreator")
+  withdrawals_approved              Withdrawal[]          @relation("WithdrawalApprover")
+  notifications                     Notification[]
+  notification_settings             UserNotificationSettings[] @relation("UserNotificationSettings")
+
+  @@map("users")
+}
+
+model AdminWallet {
+  id               String    @id @default(cuid())
+  label            String
+  address          String    @unique
+  status           String    @default("active")
+  last_assigned_at DateTime?
+  assigned_count   Int       @default(0)
+  created_at       DateTime  @default(now())
+  updated_at       DateTime  @updatedAt
+
+  // Relations
+  orders OrderDeposit[]
+
+  @@map("admin_wallets")
+}
+
+model LicenseProduct {
+  id                 String  @id @default(cuid())
+  name               String
+  code               String  @unique
+  price_usdt         Decimal @db.Decimal(10, 2)
+  daily_rate         Decimal @db.Decimal(5, 4)
+  duration_days      Int
+  max_cap_percentage Decimal @db.Decimal(5, 2)
+  cashback_cap       Decimal @default(1.00) @db.Decimal(5, 2)
+  potential_cap      Decimal @default(1.00) @db.Decimal(5, 2)
+  description        String?
+  sla_hours          Int?
+  badge              String?
+  target_user        String?
+  status             String  @default("active")
+  active             Boolean @default(true)
+  created_at         DateTime @default(now())
+  updated_at         DateTime @updatedAt
+
+  // Relations
+  orders   OrderDeposit[]
+  licenses UserLicense[]
+
+  @@map("license_products")
+}
+
+model OrderDeposit {
+  id                 String   @id @default(cuid())
+  user_id            String
+  product_id         String
+  amount_usdt        Decimal  @db.Decimal(10, 2)
+  wallet_address     String
+  tx_hash            String?
+  status             OrderStatus @default(pending)
+  reserved_wallet_id String?
+  payment_method     String   @default("USDT")
+  paid_at            DateTime?
+  confirmed_at       DateTime?
+  raw_chain_payload  Json?
+  expires_at         DateTime
+  created_at         DateTime @default(now())
+  updated_at         DateTime @updatedAt
+
+  // Relations
+  user           User           @relation(fields: [user_id], references: [id])
+  product        LicenseProduct @relation(fields: [product_id], references: [id])
+  reserved_wallet AdminWallet?  @relation(fields: [reserved_wallet_id], references: [id])
+
+  @@map("orders_deposits")
+}
+
+model UserLicense {
+  id                String        @id @default(cuid())
+  user_id           String
+  product_id        String
+  order_id          String
+  principal_usdt    Decimal       @db.Decimal(10, 2)
+  total_earned_usdt Decimal       @default(0) @db.Decimal(10, 2)
+  cashback_accum    Decimal       @default(0) @db.Decimal(20, 6)
+  potential_accum   Decimal       @default(0) @db.Decimal(20, 6)
+  status            LicenseStatus @default(active)
+  days_generated    Int           @default(0)
+  pause_potential   Boolean       @default(false)
+  flags             Json          @default("{}")
+  started_at        DateTime      @default(now())
+  ends_at           DateTime
+  created_at        DateTime      @default(now())
+  updated_at        DateTime      @updatedAt
+
+  // Relations
+  user     User             @relation(fields: [user_id], references: [id])
+  product  LicenseProduct   @relation(fields: [product_id], references: [id])
+  earnings LicenseDailyEarning[]
+
+  @@map("user_licenses")
+}
+
+model LicenseDailyEarning {
+  id                  String    @id @default(cuid())
+  license_id          String
+  day_index           Int
+  earning_date        DateTime
+  cashback_amount     Decimal   @db.Decimal(20, 6)
+  potential_amount    Decimal   @db.Decimal(20, 6)
+  applied_to_balance  Boolean   @default(false)
+  applied_at          DateTime?
+  created_at          DateTime  @default(now())
+
+  // Relations
+  license UserLicense @relation(fields: [license_id], references: [id])
+
+  @@unique([license_id, earning_date])
+  @@map("license_daily_earnings")
+}
+
+model ReferralCommission {
+  id               String           @id @default(cuid())
+  sponsor_id       String
+  referred_user_id String
+  license_id       String
+  order_id         String?
+  amount_usdt      Decimal          @db.Decimal(10, 2)
+  status           CommissionStatus @default(pending)
+  release_at       DateTime?
+  created_at       DateTime         @default(now())
+  updated_at       DateTime         @updatedAt
+
+  // Relations
+  sponsor       User @relation("SponsorRef", fields: [sponsor_id], references: [id])
+  referred_user User @relation("ReferredRef", fields: [referred_user_id], references: [id])
+
+  @@map("referral_commissions")
+}
+
+model Bonus {
+  id                String      @id @default(cuid())
+  user_id           String
+  amount_usdt       Decimal     @db.Decimal(18, 6)
+  status            BonusStatus @default(pending)
+  reason            String?
+  created_by_admin_id String?
+  created_at        DateTime    @default(now())
+  updated_at        DateTime    @updatedAt
+
+  // Relations
+  user         User  @relation("BonusReceiver", fields: [user_id], references: [id])
+  created_by   User? @relation("BonusCreator", fields: [created_by_admin_id], references: [id])
+
+  @@map("bonuses")
+}
+
+model Withdrawal {
+  id               String           @id @default(cuid())
+  user_id          String
+  amount_usdt      Decimal          @db.Decimal(18, 6)
+  payout_address   String?
+  status           WithdrawalStatus @default(requested)
+  otp_id           String?          // Telegram OTP ID for verification
+  otp_code_hash    String?
+  otp_sent_at      DateTime?
+  otp_verified_at  DateTime?
+  approved_by_admin_id String?
+  paid_at          DateTime?
+  paid_tx_hash     String?
+  notes            String?
+  created_at       DateTime         @default(now())
+  updated_at       DateTime         @updatedAt
+
+  // Relations
+  user       User  @relation(fields: [user_id], references: [id])
+  approved_by User? @relation("WithdrawalApprover", fields: [approved_by_admin_id], references: [id])
+
+  @@map("withdrawals")
+}
+
+model LedgerEntry {
+  id                      String          @id @default(cuid())
+  user_id                 String
+  amount                  Decimal         @db.Decimal(18, 6)
+  direction               LedgerDirection
+  ref_type                LedgerRefType
+  ref_id                  String?
+  available_balance_after Decimal?        @db.Decimal(18, 6)
+  meta                    Json?
+  created_at              DateTime        @default(now())
+
+  // Relations
+  user User @relation(fields: [user_id], references: [id])
+
+  @@map("ledger_entries")
+}
+
+model AuditLog {
+  id            String   @id @default(cuid())
+  actor_user_id String?
+  action        String
+  entity        String
+  entity_id     String?
+  old_values    Json?
+  new_values    Json?
+  diff          Json?
+  ip_address    String?
+  user_agent    String?
+  created_at    DateTime @default(now())
+
+  // Relations
+  actor User? @relation("ActorLogs", fields: [actor_user_id], references: [id])
+
+  @@map("audit_logs")
+}
+
+model Notification {
+  id         String               @id @default(cuid())
+  user_id    String
+  type       NotificationType
+  title      String
+  message    String
+  severity   NotificationSeverity @default(info)
+  read_at    DateTime?
+  meta       Json?
+  created_at DateTime             @default(now())
+  updated_at DateTime             @updatedAt
+
+  // Relations
+  user User @relation(fields: [user_id], references: [id])
+
+  @@index([user_id, created_at])
+  @@index([type, created_at])
+  @@map("notifications")
+}
+
+model UserNotificationSettings {
+  id                String           @id @default(cuid())
+  user_id           String
+  notification_type NotificationType
+  enabled           Boolean          @default(true)
+  email_enabled     Boolean          @default(false)
+  push_enabled      Boolean          @default(true)
+  telegram_enabled  Boolean          @default(false)
+  created_at        DateTime         @default(now())
+  updated_at        DateTime         @updatedAt
+
+  // Relations
+  user User @relation("UserNotificationSettings", fields: [user_id], references: [id])
+
+  @@unique([user_id, notification_type])
+  @@map("user_notification_settings")
+}
+
+model Setting {
+  key        String   @id
+  value      Json
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  @@map("settings")
+}

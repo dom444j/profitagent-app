@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Frontend Licenses</title>
+</head>
+<body>
+    <h1>Test Frontend Licenses</h1>
+    <p>Testing if the frontend is accessible:</p>
+    <ul>
+        <li><a href="http://localhost:3000/user/licenses" target="_blank">User Licenses Page</a></li>
+        <li><a href="http://localhost:3000/admin/licenses" target="_blank">Admin Licenses Page</a></li>
+        <li><a href="http://localhost:3000/login" target="_blank">Login Page</a></li>
+    </ul>
+    
+    <script>
+        // Test API calls
+        async function testAPI() {
+            try {
+                // Test if frontend is running
+                const response = await fetch('http://localhost:3000');
+                console.log('Frontend status:', response.status);
+                
+                // Test backend API
+                const apiResponse = await fetch('http://localhost:5000/health');
+                console.log('Backend health:', apiResponse.status);
+                
+            } catch (error) {
+                console.error('Error testing:', error);
+            }
+        }
+        
+        testAPI();
+    </script>
+</body>
+</html>

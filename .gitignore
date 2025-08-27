@@ -1,0 +1,35 @@
+# --- dependencias / builds
+node_modules/
+**/dist/
+**/.next/
+**/.turbo/
+coverage/
+logs/
+*.log
+
+# --- editores / SO
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# --- env y secretos
+*.env
+*.env.*
+!*.env.example
+backend/.env*
+frontend/.env*
+!backend/.env.example
+!frontend/.env.example
+
+# --- documentación y QA (no pública)
+docs/**
+qa/**
+**/*.md
+!README.md
+!LICENSE
+
+# --- otros
+.git-credentials
+npm-debug.log*
+yarn-error.log*
