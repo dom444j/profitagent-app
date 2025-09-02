@@ -424,21 +424,25 @@ const AdminLicensesPage: React.FC = () => {
                       
                       <td className="px-3 sm:px-6 py-4 whitespace-nowrap hidden sm:table-cell">
                         <div className="text-sm text-gray-900">
-                          {license.startedAt || license.started_at ? 
-                            new Date(license.startedAt || license.started_at).toLocaleDateString('es-ES', {
-                              year: 'numeric',
-                              month: '2-digit',
-                              day: '2-digit'
-                            }) : 'No activada'
-                          }
+                          {(() => {
+                            const dateValue = license.startedAt || license.started_at;
+                            return dateValue ? 
+                              new Date(dateValue).toLocaleDateString('es-ES', {
+                                year: 'numeric',
+                                month: '2-digit',
+                                day: '2-digit'
+                              }) : 'No activada';
+                          })()}
                         </div>
                         <div className="text-xs text-gray-500">
-                          {license.startedAt || license.started_at ? 
-                            new Date(license.startedAt || license.started_at).toLocaleTimeString('es-ES', {
-                              hour: '2-digit',
-                              minute: '2-digit'
-                            }) : ''
-                          }
+                          {(() => {
+                            const dateValue = license.startedAt || license.started_at;
+                            return dateValue ? 
+                              new Date(dateValue).toLocaleTimeString('es-ES', {
+                                hour: '2-digit',
+                                minute: '2-digit'
+                              }) : '';
+                          })()}
                         </div>
                       </td>
                       
