@@ -31,6 +31,9 @@ qa/**
 !README.md
 !LICENSE
 
+# --- carpetas excluidas
+smart-contracts/
+
 # --- otros
 .git-credentials
 npm-debug.log*
