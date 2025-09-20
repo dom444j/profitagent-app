@@ -8,11 +8,14 @@ import { adminSettingsService } from '../modules/admin/settings.service';
 export async function processDailyEarnings(job: Job) {
   let prisma: PrismaClient | null = null;
   try {
-    logger.info('Processing daily earnings for all active licenses - Contractual Model 10%/day x 20 days');
+    logger.info('Processing daily earnings for all active licenses - Contractual Model 8%/day x 25 days');
     
-    // Get DATABASE_URL with fallback
-    const databaseUrl = process.env.DATABASE_URL || 'postgresql://grow5x:password123@localhost:55432/grow5x?schema=public';
-    logger.info('DATABASE_URL: ' + databaseUrl);
+    // Get DATABASE_URL from environment
+    const databaseUrl = process.env.DATABASE_URL;
+    if (!databaseUrl) {
+      throw new Error('DATABASE_URL environment variable is required');
+    }
+    logger.info('DATABASE_URL configured from environment');
     
     // Create new Prisma client instance
     prisma = new PrismaClient({
@@ -34,8 +37,34 @@ export async function processDailyEarnings(job: Job) {
     const dailyRate = adminSettings.system.daily_earning_rate;
     const maxDays = adminSettings.system.max_earning_days;
     const earningCapPercentage = adminSettings.system.earning_cap_percentage;
+    const maintenanceMode = adminSettings.system.maintenance_mode;
+    const automaticDailyEarningsProcessing = adminSettings.system.automatic_daily_earnings_processing;
     
-    logger.info({ dailyRate, maxDays, earningCapPercentage }, 'Using configurable settings from admin panel');
+    // Check if system is in maintenance mode - if so, skip processing
+    if (maintenanceMode) {
+      logger.info('System is in maintenance mode - skipping daily earnings processing');
+      return {
+        success: true,
+        processed: 0,
+        completed: 0,
+        total: 0,
+        message: 'Processing skipped due to maintenance mode'
+      };
+    }
+    
+    // Check if automatic daily earnings processing is disabled - if so, skip processing
+    if (!automaticDailyEarningsProcessing) {
+      logger.info('Automatic daily earnings processing is disabled - skipping processing');
+      return {
+        success: true,
+        processed: 0,
+        completed: 0,
+        total: 0,
+        message: 'Processing skipped - automatic daily earnings processing is disabled'
+      };
+    }
+    
+    logger.info({ dailyRate, maxDays, earningCapPercentage, maintenanceMode }, 'Using configurable settings from admin panel');
     
     // Get all active licenses
     const activeLicenses = await prisma.userLicense.findMany({
@@ -103,29 +132,55 @@ export async function processDailyEarnings(job: Job) {
           continue;
         }
         
-        // Idempotency check: ensure earnings not already processed today for this license
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
+        // Calculate the correct earning date based on license start date and next day
+        const nextDay = currentDays + 1;
+        const startDate = new Date(license.started_at);
+        const earningDate = new Date(startDate);
+        earningDate.setDate(earningDate.getDate() + nextDay - 1);
+        earningDate.setHours(0, 0, 0, 0);
+        
+        // Check if 24 hours have passed since license activation
+        const now = new Date();
+        const hoursSinceActivation = (now.getTime() - startDate.getTime()) / (1000 * 60 * 60);
+        
+        // Only process if at least 24 hours have passed since activation
+        if (hoursSinceActivation < 24) {
+          logger.info({ 
+            licenseId: license.id, 
+            hoursSinceActivation: hoursSinceActivation.toFixed(2),
+            startDate: startDate.toISOString(),
+            currentTime: now.toISOString()
+          }, 'License activated less than 24 hours ago - skipping earnings processing');
+          continue;
+        }
+        
+        // Additional check: ensure earning date is not in the future
+        if (earningDate > now) {
+          logger.info({ 
+            licenseId: license.id, 
+            earningDate: earningDate.toISOString(),
+            currentTime: now.toISOString()
+          }, 'Earning date is in the future - skipping');
+          continue;
+        }
          
-        const existingEarning = await prisma.licenseDailyEarning.findUnique({
+        // Idempotency check: ensure earnings not already processed for this day
+        const existingEarning = await prisma.licenseDailyEarning.findFirst({
           where: {
-            license_id_earning_date: {
-              license_id: license.id,
-              earning_date: today
-            }
+            license_id: license.id,
+            earning_date: earningDate
           }
         });
         
         if (existingEarning) {
-          logger.info({ licenseId: license.id, existingDay: existingEarning.day_index }, 'Earnings already processed today for license - skipping (idempotency)');
+          logger.info({ licenseId: license.id, existingDay: existingEarning.day_index, earningDate }, 'Earnings already processed for this day - skipping (idempotency)');
           continue;
         }
         
-        // Calculate daily earning: 10% of principal
+        // Calculate daily earning: 8% of principal
         const dailyAmount = principalUSDT * dailyRate;
-        const nextDay = currentDays + 1;
         
-        // Ensure we don't exceed 20 days
+        // Ensure we don't exceed max days
         if (nextDay > maxDays) {
           logger.info({ licenseId: license.id, nextDay, maxDays }, 'License would exceed max days - marking as completed');
           await prisma.userLicense.update({
@@ -157,16 +212,26 @@ export async function processDailyEarnings(job: Job) {
               cashback_amount: new Decimal(dailyAmount),
               potential_amount: new Decimal(dailyAmount),
               applied_to_balance: appliedToBalance,
-              earning_date: today,
+              earning_date: earningDate,
               applied_at: appliedToBalance ? new Date() : null
             }
           });
           
-          // Update license days_generated
+          // Calculate accumulated values
+          const totalEarnedUSDT = nextDay * dailyAmount;
+          const cashbackDays = Math.min(nextDay, 13);
+          const potentialDays = Math.max(0, nextDay - 13);
+          const cashbackAccum = cashbackDays * dailyAmount;
+          const potentialAccum = potentialDays * dailyAmount;
+          
+          // Update license with all calculated fields
           await tx.userLicense.update({
             where: { id: license.id },
             data: {
-              days_generated: nextDay // Critical: increment days_generated
+              days_generated: nextDay, // Critical: increment days_generated
+               total_earned_usdt: new Decimal(totalEarnedUSDT), // Total accumulated earnings
+               cashback_accum: new Decimal(cashbackAccum), // Cashback phase accumulation
+               potential_accum: new Decimal(potentialAccum) // Potential phase accumulation
             }
           });
           

@@ -1,4 +1,4 @@
-import { exec } from 'child_process';
+﻿import { exec } from 'child_process';
 import { promisify } from 'util';
 import { logger } from '../../utils/logger';
 
@@ -17,7 +17,7 @@ export class DockerProductService {
         sqlCommand = sqlCommand.replace(new RegExp(`\\${placeholder}\\b`, 'g'), value.toString());
       });
       
-      const command = `docker exec grow5x_pg psql -U grow5x -d grow5x -t -c "${sqlCommand}"`;
+      const command = `docker exec profitagent_pg psql -U profitagent -d profitagent -t -c "${sqlCommand}"`;
       logger.info('Executing SQL:', sqlCommand);
       
       const { stdout, stderr } = await execAsync(command);

@@ -41,7 +41,7 @@ const ForgotPasswordPage: React.FC = () => {
             </svg>
           </div>
           <h1 className="text-3xl font-bold bg-gradient-to-r from-white to-blue-200 bg-clip-text text-transparent mb-2">
-            Grow5X
+            profitagent
           </h1>
           <p className="text-gray-300 text-sm">
             Recupera tu contraseña

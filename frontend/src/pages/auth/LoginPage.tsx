@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
-import Button from '../../components/ui/Button';
+import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
-import Grow5xLogo from '../../components/ui/Grow5xLogo';
+import { Bot, Shield, Target, BarChart3 } from 'lucide-react';
 
 
 const LoginPage: React.FC = () => {
@@ -23,20 +23,39 @@ const LoginPage: React.FC = () => {
       await login(email, password);
       navigate('/user/dashboard');
     } catch (err: any) {
-      setError(err.message || 'Error al iniciar sesión');
+      console.error('Login error:', err);
+      
+      // Manejo específico de errores según el código de estado
+      if (err.response?.status === 401) {
+        setError('Credenciales incorrectas. Verifica tu email y contraseña.');
+      } else if (err.response?.status === 404) {
+        setError('Usuario no encontrado. Verifica tu email.');
+      } else if (err.response?.status === 403) {
+        setError('Cuenta desactivada. Contacta al administrador.');
+      } else if (err.response?.status >= 500) {
+        setError('Error del servidor. Intenta nuevamente más tarde.');
+      } else if (err.response?.data?.message) {
+        setError(err.response.data.message);
+      } else if (err.message) {
+        setError(err.message);
+      } else {
+        setError('Error al iniciar sesión. Intenta nuevamente.');
+      }
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-emerald-50 via-teal-50 to-cyan-50 flex relative overflow-hidden">
-      {/* Geometric background pattern */}
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-emerald-900 flex relative overflow-hidden">
+      {/* Animated background pattern */}
       <div className="absolute inset-0">
-        <div className="absolute top-5 sm:top-10 left-5 sm:left-10 w-16 sm:w-32 h-16 sm:h-32 bg-emerald-200/30 rounded-full"></div>
-        <div className="absolute top-16 sm:top-32 right-10 sm:right-20 w-12 sm:w-24 h-12 sm:h-24 bg-teal-200/40 rounded-lg rotate-45"></div>
-        <div className="absolute bottom-10 sm:bottom-20 left-1/4 w-20 sm:w-40 h-20 sm:h-40 bg-cyan-200/20 rounded-full"></div>
-        <div className="absolute bottom-16 sm:bottom-32 right-5 sm:right-10 w-14 sm:w-28 h-14 sm:h-28 bg-emerald-300/25 rounded-lg rotate-12"></div>
+        <div className="absolute top-10 left-10 w-32 h-32 bg-emerald-500/20 rounded-full animate-pulse"></div>
+        <div className="absolute top-32 right-20 w-24 h-24 bg-cyan-400/20 rounded-lg rotate-45 animate-bounce"></div>
+        <div className="absolute bottom-20 left-1/4 w-40 h-40 bg-teal-500/15 rounded-full animate-pulse"></div>
+        <div className="absolute bottom-32 right-10 w-28 h-28 bg-emerald-400/25 rounded-lg rotate-12"></div>
+        <div className="absolute top-1/2 left-5 w-16 h-16 bg-cyan-300/20 rounded-full animate-pulse"></div>
+        <div className="absolute top-1/3 right-1/3 w-20 h-20 bg-emerald-300/25 rounded-lg rotate-45"></div>
       </div>
 
       {/* Left side - Welcome section */}
@@ -44,34 +63,45 @@ const LoginPage: React.FC = () => {
         <div className="max-w-lg text-center">
           {/* Logo */}
           <div className="mb-6 xl:mb-8">
-            <div className="w-20 xl:w-24 h-20 xl:h-24 mx-auto bg-gradient-to-r from-emerald-500 to-teal-500 rounded-3xl flex items-center justify-center shadow-2xl transform rotate-3">
-              <Grow5xLogo size="xl" variant="white" className="w-10 xl:w-12 h-10 xl:h-12" />
+            <div className="w-20 xl:w-24 h-20 xl:h-24 mx-auto bg-gradient-to-r from-emerald-500 to-cyan-400 rounded-3xl flex items-center justify-center shadow-2xl transform rotate-3 border border-emerald-400/30">
+              <Bot className="w-10 xl:w-12 h-10 xl:h-12 text-emerald-400" />
             </div>
           </div>
           
-          <h2 className="text-6xl font-bold text-gray-800 mb-6 leading-tight">
+          <h2 className="text-5xl xl:text-6xl font-bold text-white mb-6 leading-tight">
             Bienvenido a
-            <span className="block bg-gradient-to-r from-emerald-500 to-teal-500 bg-clip-text text-transparent">
-              Grow5X
+            <span className="block bg-gradient-to-r from-emerald-400 to-cyan-300 bg-clip-text text-transparent">
+              ProFitAgent
             </span>
           </h2>
-          <p className="text-gray-600 text-xl leading-relaxed mb-8">
-            Tu plataforma de herramientas tecnológicas con inteligencia artificial. Accede a agentes IA especializados en arbitraje crypto.
+          <p className="text-gray-300 text-lg xl:text-xl leading-relaxed mb-8">
+            Plataforma de arbitraje automatizado con agentes IA especializados. Accede a tecnología de doble arbitraje cripto y surebet.
           </p>
           
           {/* Feature highlights */}
-          <div className="space-y-4">
-            <div className="flex items-center justify-center text-gray-600">
-              <div className="w-3 h-3 bg-emerald-400 rounded-full mr-4"></div>
-              <span className="text-lg">Licencias tecnológicas avanzadas</span>
+          <div className="space-y-6">
+            <div className="bg-emerald-500/10 backdrop-blur-sm rounded-2xl p-4 border border-emerald-400/30">
+              <div className="flex items-center justify-center text-emerald-300 mb-2">
+                <Bot className="w-6 h-6 mr-3" />
+                <span className="text-lg font-semibold">Agentes IA Automatizados</span>
+              </div>
+              <p className="text-gray-400 text-sm">Algoritmos avanzados operando 24/7</p>
             </div>
-            <div className="flex items-center justify-center text-gray-600">
-              <div className="w-3 h-3 bg-teal-400 rounded-full mr-4"></div>
-              <span className="text-lg">Agentes IA automatizados 24/7</span>
+            
+            <div className="bg-cyan-500/10 backdrop-blur-sm rounded-2xl p-4 border border-cyan-400/30">
+              <div className="flex items-center justify-center text-cyan-300 mb-2">
+                <Target className="w-6 h-6 mr-3" />
+                <span className="text-lg font-semibold">Doble Arbitraje Simultáneo</span>
+              </div>
+              <p className="text-gray-400 text-sm">Cripto + Surebet en una sola plataforma</p>
             </div>
-            <div className="flex items-center justify-center text-gray-600">
-              <div className="w-3 h-3 bg-emerald-400 rounded-full mr-4"></div>
-              <span className="text-lg">Tecnología de arbitraje avanzada</span>
+            
+            <div className="bg-teal-500/10 backdrop-blur-sm rounded-2xl p-4 border border-teal-400/30">
+              <div className="flex items-center justify-center text-teal-300 mb-2">
+                <BarChart3 className="w-6 h-6 mr-3" />
+                <span className="text-lg font-semibold">Licencias Tecnológicas</span>
+              </div>
+              <p className="text-gray-400 text-sm">Acceso a infraestructura profesional</p>
             </div>
           </div>
         </div>
@@ -82,135 +112,133 @@ const LoginPage: React.FC = () => {
         <div className="w-full max-w-md">
           {/* Mobile header */}
           <div className="lg:hidden text-center mb-6 sm:mb-8">
-            <div className="inline-flex items-center justify-center w-14 sm:w-16 h-14 sm:h-16 bg-gradient-to-r from-emerald-500 to-teal-500 rounded-2xl mb-3 sm:mb-4 shadow-lg">
-              <Grow5xLogo size="lg" variant="white" className="w-7 sm:w-8 h-7 sm:h-8" />
+            <div className="inline-flex items-center justify-center w-14 sm:w-16 h-14 sm:h-16 bg-gradient-to-r from-emerald-500 to-cyan-400 rounded-2xl mb-3 sm:mb-4 shadow-lg border border-emerald-400/30">
+              <Bot className="w-7 sm:w-8 h-7 sm:h-8 text-emerald-400" />
             </div>
-            <h1 className="text-2xl sm:text-3xl font-bold bg-gradient-to-r from-emerald-500 to-teal-500 bg-clip-text text-transparent mb-2">
-              Grow5X
+            <h1 className="text-2xl sm:text-3xl font-bold bg-gradient-to-r from-emerald-400 to-cyan-300 bg-clip-text text-transparent mb-2">
+              ProFitAgent
             </h1>
-            <p className="text-gray-600 text-xs sm:text-sm">
-              Plataforma de licencias tecnológicas
+            <p className="text-gray-300 text-xs sm:text-sm">
+              Arbitraje Automatizado con IA
             </p>
           </div>
 
-          {/* Clean white card */}
-          <div className="bg-white rounded-2xl sm:rounded-3xl shadow-2xl border border-gray-100 p-6 sm:p-8">
-          <div className="mb-6 sm:mb-8">
-              <h2 className="text-xl sm:text-2xl font-bold text-gray-900 mb-2">
+          {/* Glass morphism card */}
+          <div className="bg-white/10 backdrop-blur-xl border border-white/20 rounded-2xl sm:rounded-3xl shadow-2xl p-6 sm:p-8">
+            <div className="mb-6 sm:mb-8">
+              <h2 className="text-xl sm:text-2xl font-bold text-white mb-2">
                 Iniciar Sesión
               </h2>
-              <p className="text-gray-600 text-sm sm:text-base">
-                Accede a tu cuenta y utiliza nuestras herramientas
+              <p className="text-gray-300 text-sm sm:text-base">
+                Accede a tu cuenta y gestiona tus licencias de arbitraje
               </p>
             </div>
 
-          <form className="space-y-5" onSubmit={handleSubmit}>
-            <div className="space-y-4">
-              <div>
-                <label htmlFor="email" className="block text-sm font-semibold text-gray-700 mb-2">
-                  <span className="flex items-center">
-                    <svg className="h-4 w-4 mr-2 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 12a4 4 0 10-8 0 4 4 0 008 0zm0 0v1.5a2.5 2.5 0 005 0V12a9 9 0 10-9 9m4.5-1.206a8.959 8.959 0 01-4.5 1.207" />
-                    </svg>
-                    Email
-                  </span>
-                </label>
-                <Input
-                  id="email"
-                  name="email"
-                  type="email"
-                  autoComplete="email"
-                  required
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="tu@email.com"
-                  className="h-12 border-gray-200 focus:border-emerald-400 focus:ring-emerald-400 rounded-xl bg-gray-50 focus:bg-white transition-colors"
-                />
-              </div>
-              
-              <div>
-                <label htmlFor="password" className="block text-sm font-semibold text-gray-700 mb-2">
-                  <span className="flex items-center">
-                    <svg className="h-4 w-4 mr-2 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                    </svg>
-                    Contraseña
-                  </span>
-                </label>
-                <Input
-                  id="password"
-                  name="password"
-                  type="password"
-                  autoComplete="current-password"
-                  required
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="Tu contraseña"
-                  className="h-12 border-gray-200 focus:border-emerald-400 focus:ring-emerald-400 rounded-xl bg-gray-50 focus:bg-white transition-colors"
-                />
-              </div>
-
-              {error && (
-                <div className="p-4 rounded-xl border border-red-200 bg-red-50 text-red-700 text-sm flex items-center">
-                  <svg className="w-4 h-4 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                  {error}
+            <form className="space-y-5" onSubmit={handleSubmit}>
+              <div className="space-y-4">
+                <div>
+                  <label htmlFor="email" className="block text-sm font-semibold text-white mb-2">
+                    <span className="flex items-center">
+                      <svg className="h-4 w-4 mr-2 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 12a4 4 0 10-8 0 4 4 0 008 0zm0 0v1.5a2.5 2.5 0 005 0V12a9 9 0 10-9 9m4.5-1.206a8.959 8.959 0 01-4.5 1.207" />
+                      </svg>
+                      Email
+                    </span>
+                  </label>
+                  <Input
+                    id="email"
+                    name="email"
+                    type="email"
+                    autoComplete="email"
+                    required
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="tu@email.com"
+                    className="w-full px-4 py-3 border border-white/20 rounded-xl focus:ring-2 focus:ring-emerald-400 focus:border-emerald-400 transition-all duration-200 bg-white/5 backdrop-blur-sm hover:bg-white/10 text-white placeholder-gray-400"
+                  />
                 </div>
-              )}
+                
+                <div>
+                  <label htmlFor="password" className="block text-sm font-semibold text-white mb-2">
+                    <span className="flex items-center">
+                      <svg className="h-4 w-4 mr-2 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                      </svg>
+                      Contraseña
+                    </span>
+                  </label>
+                  <Input
+                    id="password"
+                    name="password"
+                    type="password"
+                    autoComplete="current-password"
+                    required
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="Tu contraseña"
+                    className="w-full px-4 py-3 border border-white/20 rounded-xl focus:ring-2 focus:ring-emerald-400 focus:border-emerald-400 transition-all duration-200 bg-white/5 backdrop-blur-sm hover:bg-white/10 text-white placeholder-gray-400"
+                  />
+                </div>
 
-              <Button
-                type="submit"
-                disabled={loading}
-                className="w-full bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-white font-semibold py-3 px-4 rounded-xl transition-all duration-200 transform hover:scale-[1.02] active:scale-[0.98] shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
-              >
-                {loading ? (
-                  <>
-                    <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                {error && (
+                  <div className="bg-red-500/10 border border-red-400/30 text-red-300 px-4 py-3 rounded-xl text-sm backdrop-blur-sm flex items-center">
+                    <svg className="w-4 h-4 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
-                    Iniciando sesión...
-                  </>
-                ) : (
-                  <>
-                    <svg className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" />
-                    </svg>
-                    Iniciar Sesión
-                  </>
+                    {error}
+                  </div>
                 )}
-              </Button>
 
-              <div className="text-center mt-6">
-                <Link
-                  to="/forgot-password"
-                  className="text-sm text-emerald-600 hover:text-emerald-700 transition-colors duration-200 font-medium"
+                <Button
+                  type="submit"
+                  disabled={loading}
+                  className="w-full bg-gradient-to-r from-emerald-500 to-cyan-500 hover:from-emerald-600 hover:to-cyan-600 text-white font-semibold py-3 px-4 rounded-xl transition-all duration-200 transform hover:scale-[1.02] active:scale-[0.98] shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none border border-emerald-400/30"
                 >
-                  ¿Olvidaste tu contraseña?
-                </Link>
-              </div>
-            </div>
+                  {loading ? (
+                    <>
+                      <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                      Iniciando sesión...
+                    </>
+                  ) : (
+                    <>
+                      <Shield className="h-5 w-5 mr-2" />
+                      Acceder a ProFitAgent
+                    </>
+                  )}
+                </Button>
 
-            <div className="space-y-4">
-              <div className="flex items-center">
-                <div className="flex-1 border-t border-gray-200"></div>
-                <div className="px-4 text-sm text-gray-500 font-medium">o</div>
-                <div className="flex-1 border-t border-gray-200"></div>
+                <div className="text-center mt-6">
+                  <Link
+                    to="/forgot-password"
+                    className="text-sm text-emerald-400 hover:text-emerald-300 transition-colors duration-200 font-medium"
+                  >
+                    ¿Olvidaste tu contraseña?
+                  </Link>
+                </div>
               </div>
-              
-              <div className="flex flex-col space-y-3">
-                <Link
-                  to="/register"
-                  className="group flex items-center justify-center py-3 px-4 border-2 border-emerald-200 rounded-xl text-sm font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 hover:border-emerald-300 transition-all duration-200"
-                >
-                  <svg className="h-4 w-4 mr-2 text-emerald-600 group-hover:text-emerald-700" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
-                  </svg>
-                  ¿No tienes cuenta? Regístrate aquí
-                </Link>
+
+              <div className="space-y-4">
+                <div className="flex items-center">
+                  <div className="flex-1 border-t border-white/20"></div>
+                  <div className="px-4 text-sm text-gray-400 font-medium">o</div>
+                  <div className="flex-1 border-t border-white/20"></div>
+                </div>
+                
+                <div className="flex flex-col space-y-3">
+                  <Link
+                    to="/register"
+                    className="group flex items-center justify-center py-3 px-4 border-2 border-emerald-400/30 rounded-xl text-sm font-semibold text-emerald-300 bg-emerald-500/10 hover:bg-emerald-500/20 hover:border-emerald-400/50 transition-all duration-200 backdrop-blur-sm"
+                  >
+                    <svg className="h-4 w-4 mr-2 text-emerald-400 group-hover:text-emerald-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
+                    </svg>
+                    ¿No tienes cuenta? Regístrate aquí
+                  </Link>
+                </div>
               </div>
-            </div>
             </form>
           </div>
         </div>
@@ -220,3 +248,4 @@ const LoginPage: React.FC = () => {
 };
 
 export default LoginPage;
+

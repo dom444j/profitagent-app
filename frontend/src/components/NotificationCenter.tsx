@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Bell, X, AlertCircle, CheckCircle, Info, AlertTriangle } from 'lucide-react';
-import { useAuth } from '../contexts/AuthContext';
+import { useSSE } from '../hooks/useSSE';
 import NotificationPortal from './NotificationPortal';
 
 interface Notification {
@@ -21,7 +21,7 @@ interface NotificationCenterProps {
 }
 
 export const NotificationCenter: React.FC<NotificationCenterProps> = ({ className = '' }) => {
-  const { user } = useAuth();
+  const { lastEvent } = useSSE();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [isOpen, setIsOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -31,33 +31,15 @@ export const NotificationCenter: React.FC<NotificationCenterProps> = ({ classNam
     loadNotificationHistory();
   }, []);
 
-  // Set up SSE connection for real-time notifications
+  // Handle SSE events for real-time notifications
   useEffect(() => {
-    if (!user) return;
-
-    const eventSource = new EventSource('/api/v1/sse/events', {
-      withCredentials: true
-    });
-
-    eventSource.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data);
-        if (data.type === 'notification') {
-          addNotification(data.data);
-        }
-      } catch (error) {
-        console.error('Error parsing SSE notification:', error);
+    if (lastEvent && lastEvent.type === 'orderUpdated' && lastEvent.data) {
+      // Check if it's a notification event
+      if (lastEvent.data.type) {
+        addNotification(lastEvent.data);
       }
-    };
-
-    eventSource.onerror = (error) => {
-      console.error('SSE connection error:', error);
-    };
-
-    return () => {
-      eventSource.close();
-    };
-  }, [user]);
+    }
+  }, [lastEvent]);
 
   const loadNotificationHistory = async () => {
     try {
@@ -97,7 +79,7 @@ export const NotificationCenter: React.FC<NotificationCenterProps> = ({ classNam
     if (Notification.permission === 'granted') {
       new Notification(notification.title, {
         body: notification.message,
-        icon: '/favicon.ico'
+        icon: '/favicon.svg'
       });
     }
   };

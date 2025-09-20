@@ -31,7 +31,7 @@ export class DockerAuthService {
         finalQuery = finalQuery.replace(new RegExp(`\\$${index + 1}`, 'g'), param);
       });
       
-      const command = `docker exec -i grow5x_pg psql -U grow5x -d grow5x -t -A -F"|" -c "${finalQuery}"`;
+      const command = `docker exec -i profitagent_pg psql -U profitagent -d profitagent -t -A -F"|" -c "${finalQuery}"`;
       logger.info(`Executing SQL: ${finalQuery}`);
       
       const { stdout, stderr } = await execAsync(command);
@@ -97,19 +97,22 @@ export class DockerAuthService {
         throw new Error('Email already registered');
       }
 
-      // Validate sponsor if provided
-      let sponsorId = null;
-      if (data.sponsor_code) {
-        const sponsors = await this.executeSQL(
-          'SELECT id FROM users WHERE ref_code = $1',
-          [data.sponsor_code]
-        );
-        
-        if (sponsors.length === 0) {
-          throw new Error('Invalid sponsor code');
-        }
-        sponsorId = sponsors[0];
+      // Validate sponsor code is required
+      if (!data.sponsor_code || !data.sponsor_code.trim()) {
+        throw new Error('Sponsor code is required');
       }
+
+      // Validate sponsor
+      const sponsors = await this.executeSQL(
+        'SELECT id FROM users WHERE ref_code = $1',
+        [data.sponsor_code]
+      );
+      
+      if (sponsors.length === 0) {
+        throw new Error('Invalid sponsor code');
+      }
+      // Extract the ID from the first line (sponsors[0] is a string with the ID)
+      const sponsorId = sponsors[0].trim();
 
       // Hash password
       const passwordHash = await bcrypt.hash(data.password, 10);
@@ -125,7 +128,7 @@ export class DockerAuthService {
         userId, 
         data.email, 
         passwordHash, 
-        data.first_name, 
+        data.first_name,
         data.last_name, 
         refCode, 
         sponsorId

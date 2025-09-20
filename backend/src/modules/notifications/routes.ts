@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import { Router, Request, Response } from 'express';
 import { authMiddleware, adminMiddleware } from '../../lib/middleware';
 import { realTimeNotificationService } from '../../services/real-time-notifications';
 import { logger } from '../../utils/logger';
@@ -10,7 +10,7 @@ const router = Router();
  * Get notification history for the authenticated user with pagination
  * Query params: page, limit, type, read
  */
-router.get('/history', authMiddleware, async (req, res) => {
+router.get('/history', authMiddleware, async (req: Request, res: Response) => {
   try {
     const userId = req.user!.id;
     const isAdmin = req.user!.role === 'ADMIN';
@@ -59,7 +59,7 @@ router.get('/history', authMiddleware, async (req, res) => {
  * PUT /api/v1/notifications/:id/read
  * Mark a notification as read
  */
-router.put('/:id/read', authMiddleware, async (req, res) => {
+router.put('/:id/read', authMiddleware, async (req: Request, res: Response) => {
   try {
     const notificationId = req.params.id;
     const userId = req.user!.id;
@@ -94,7 +94,7 @@ router.put('/:id/read', authMiddleware, async (req, res) => {
  * POST /api/v1/notifications/test
  * Send a test notification (admin only)
  */
-router.post('/test', authMiddleware, adminMiddleware, async (req, res) => {
+router.post('/test', authMiddleware, adminMiddleware, async (req: Request, res: Response) => {
   try {
     const { type, title, message, severity, userId } = req.body;
     
@@ -135,7 +135,7 @@ router.post('/test', authMiddleware, adminMiddleware, async (req, res) => {
  * POST /api/v1/notifications/system-alert
  * Send a system alert (admin only)
  */
-router.post('/system-alert', authMiddleware, adminMiddleware, async (req, res) => {
+router.post('/system-alert', authMiddleware, adminMiddleware, async (req: Request, res: Response) => {
   try {
     const { type, details, severity, count } = req.body;
     
@@ -178,7 +178,7 @@ router.post('/system-alert', authMiddleware, adminMiddleware, async (req, res) =
  * GET /api/v1/notifications/stats
  * Get notification statistics (admin only)
  */
-router.get('/stats', authMiddleware, adminMiddleware, async (req, res) => {
+router.get('/stats', authMiddleware, adminMiddleware, async (req: Request, res: Response) => {
   try {
     const allNotifications = await realTimeNotificationService.getNotificationHistory(undefined, true, 1000);
     

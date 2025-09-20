@@ -93,7 +93,7 @@ export class AuditLogsService {
             select: {
               email: true,
               first_name: true,
-              last_name: true
+        last_name: true
             }
           }
         },

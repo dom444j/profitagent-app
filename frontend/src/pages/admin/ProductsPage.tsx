@@ -232,6 +232,9 @@ const ProductsPage: React.FC = () => {
                   <th className="px-3 sm:px-8 py-3 sm:py-4 text-left text-xs sm:text-sm font-semibold text-slate-700 uppercase tracking-wider hidden lg:table-cell">
                     Duración
                   </th>
+                  <th className="px-3 sm:px-8 py-3 sm:py-4 text-left text-xs sm:text-sm font-semibold text-slate-700 uppercase tracking-wider hidden xl:table-cell">
+                    Tipo de Agente
+                  </th>
                   <th className="px-3 sm:px-8 py-3 sm:py-4 text-left text-xs sm:text-sm font-semibold text-slate-700 uppercase tracking-wider hidden sm:table-cell">
                     Estado
                   </th>
@@ -282,6 +285,19 @@ const ProductsPage: React.FC = () => {
                        <div className="bg-gradient-to-r from-blue-100 to-indigo-100 px-2 sm:px-3 py-1 rounded-xl">
                          <span className="text-blue-700 font-semibold text-xs sm:text-sm">{product.duration_days} días</span>
                        </div>
+                     </div>
+                   </td>
+                   <td className="px-3 sm:px-8 py-4 sm:py-6 hidden xl:table-cell">
+                     <div className="flex items-center">
+                       {parseFloat(product.price_usdt) >= 5000 ? (
+                         <div className="bg-gradient-to-r from-purple-100 to-violet-100 px-2 sm:px-3 py-1 rounded-xl">
+                           <span className="text-purple-700 font-semibold text-xs sm:text-sm">🤖 Dedicado</span>
+                         </div>
+                       ) : (
+                         <div className="bg-gradient-to-r from-orange-100 to-amber-100 px-2 sm:px-3 py-1 rounded-xl">
+                           <span className="text-orange-700 font-semibold text-xs sm:text-sm">👥 Compartido</span>
+                         </div>
+                       )}
                      </div>
                    </td>
                    <td className="px-3 sm:px-8 py-4 sm:py-6">
@@ -471,6 +487,27 @@ const ProductsPage: React.FC = () => {
                      placeholder="5000.00"
                      required
                    />
+                 </div>
+               </div>
+               
+               {/* Tipo de Agente - Campo informativo */}
+               <div className="bg-gradient-to-r from-slate-50 to-gray-50 rounded-2xl p-4 sm:p-6 border border-slate-200">
+                 <div className="flex items-center gap-3 mb-2">
+                   <span className="text-lg">{formData.price_usdt >= 5000 ? '🤖' : '👥'}</span>
+                   <h4 className="text-sm font-semibold text-slate-700">Tipo de Agente</h4>
+                 </div>
+                 <div className="text-sm text-slate-600">
+                   {formData.price_usdt >= 5000 ? (
+                     <div>
+                       <span className="font-semibold text-purple-700">Agente Dedicado</span>
+                       <p className="mt-1">Recursos exclusivos con beneficios de independencia para licencias de $5,000 o más</p>
+                     </div>
+                   ) : (
+                     <div>
+                       <span className="font-semibold text-orange-700">Agente Compartido</span>
+                       <p className="mt-1">Recursos compartidos con múltiples usuarios para licencias de $500 a $2,500</p>
+                     </div>
+                   )}
                  </div>
                </div>
                

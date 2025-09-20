@@ -6,7 +6,7 @@ import { logger } from '../../utils/logger';
 import Redis from 'ioredis';
 
 const getListSchema = z.object({
-  status: z.enum(['requested', 'otp_sent', 'otp_verified', 'approved', 'paid', 'rejected', 'canceled']).optional(),
+  status: z.enum(['requested', 'approved', 'paid', 'rejected', 'canceled']).optional(),
   userId: z.string().uuid().optional(),
   page: z.coerce.number().int().min(1).default(1),
   limit: z.coerce.number().int().min(1).max(100).default(20),
@@ -99,6 +99,9 @@ class AdminWithdrawalsController {
       return res.json(responseBody);
     } catch (error) {
       logger.error('Error marking withdrawal as paid: ' + (error as Error).message);
+      
+
+      
       return res.status(500).json({ success: false, error: 'Internal server error' });
     }
   }

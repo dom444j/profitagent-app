@@ -1,6 +1,6 @@
 import { sseService } from './sse';
 import { telegramService } from './telegram';
-import { userNotificationSettingsService } from './user-notification-settings';
+
 import { logger } from '../utils/logger';
 import { prisma } from '../lib/prisma';
 import { Prisma } from '@prisma/client';
@@ -40,11 +40,7 @@ class RealTimeNotificationService {
     };
 
     // Check if user has this notification type enabled
-    const isEnabled = await userNotificationSettingsService.isNotificationEnabled(
-      userId, 
-      notification.type as any, 
-      'push'
-    );
+    const isEnabled = true; // Simplified: always enabled
 
     // Always persist to database regardless of user settings
     await this.persistNotification(fullNotification, userId);
@@ -453,11 +449,12 @@ class RealTimeNotificationService {
 
   private formatTelegramAlert(alert: SystemAlert): string {
     const emoji = alert.severity === 'error' ? '🚨' : '⚠️';
-    let message = `${emoji} *${this.getAlertTitle(alert.type)}*\n\n`;
+    let message = `${emoji} *ProFitAgent - ${this.getAlertTitle(alert.type)}*\n\n`;
     message += `📝 ${alert.details}\n`;
     if (alert.count) {
       message += `📊 Cantidad: ${alert.count}\n`;
     }
+    message += `\n🤖 Sistema de Alertas ProFitAgent\n`;
     message += `⏰ ${new Date().toLocaleString('es-ES', { timeZone: 'America/Bogota' })}`;
     return message;
   }

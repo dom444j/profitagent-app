@@ -4,14 +4,14 @@ import { useAuth } from '../../contexts/AuthContext';
 import Button from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import LoadingSpinner from '../../components/ui/LoadingSpinner';
-import Grow5xLogo from '../../components/ui/Grow5xLogo';
+import { Bot } from 'lucide-react';
 
 const AdminLoginPage: React.FC = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const { adminLogin, user } = useAuth();
+  const { adminLogin } = useAuth();
   const navigate = useNavigate();
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -21,11 +21,7 @@ const AdminLoginPage: React.FC = () => {
 
     try {
       await adminLogin(email, password);
-      // Verificar que el usuario sea admin
-      if (user?.role !== 'admin') {
-        setError('Acceso denegado. Solo administradores pueden acceder.');
-        return;
-      }
+      // La redirección se maneja automáticamente después del login exitoso
       navigate('/admin/dashboard', { replace: true });
     } catch (err: any) {
       setError(err.message || 'Error al iniciar sesión');
@@ -49,7 +45,7 @@ const AdminLoginPage: React.FC = () => {
           {/* Logo/Icon */}
           <div className="mb-8">
             <div className="w-20 h-20 mx-auto bg-gradient-to-r from-purple-400 to-pink-400 rounded-2xl flex items-center justify-center shadow-2xl">
-              <Grow5xLogo size="lg" variant="white" />
+              <Bot className="w-8 h-8 text-emerald-400" />
             </div>
           </div>
           
@@ -90,7 +86,7 @@ const AdminLoginPage: React.FC = () => {
               {/* Mobile logo */}
               <div className="lg:hidden mb-6">
                 <div className="w-16 h-16 mx-auto bg-gradient-to-r from-purple-400 to-pink-400 rounded-2xl flex items-center justify-center shadow-xl">
-                  <Grow5xLogo size="md" variant="white" />
+                  <Bot className="w-6 h-6 text-emerald-400" />
                 </div>
               </div>
               
@@ -115,7 +111,7 @@ const AdminLoginPage: React.FC = () => {
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     required
-                    placeholder="admin@grow5x.com"
+                    placeholder="admin@profitagent.app"
                     className="pl-10 bg-white/5 border-white/20 text-white placeholder-slate-400 focus:border-purple-400 focus:ring-purple-400"
                   />
                 </div>
@@ -194,3 +190,4 @@ const AdminLoginPage: React.FC = () => {
 };
 
 export default AdminLoginPage;
+

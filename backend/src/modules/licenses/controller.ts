@@ -30,9 +30,12 @@ export class LicenseController {
       }
 
       const status = typeof req.query.status === 'string' ? req.query.status : undefined;
-      const licenses = await this.licenseService.getUserLicenses(userId, status as string | undefined);
+      const page = parseInt(req.query.page as string) || 1;
+      const limit = parseInt(req.query.limit as string) || 50;
       
-      return res.json({ data: licenses });
+      const result = await this.licenseService.getUserLicenses(userId, status as string | undefined, page, limit);
+      
+      return res.json(result);
     } catch (error) {
       logger.error('Error getting licenses: ' + (error as Error).message);
       return res.status(500).json({ error: 'Internal server error' });

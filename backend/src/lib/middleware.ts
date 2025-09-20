@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import * as jwt from 'jsonwebtoken';
-import { DockerAuthService } from '../modules/auth/docker-service';
+import { logger } from '../utils/logger'; 
+import { authService } from '../modules/auth/service';
 
 // Extend Request interface to include user
 declare global {
@@ -9,20 +10,30 @@ declare global {
       user?: {
         id: string;
         email: string;
-        first_name: string;
-        last_name: string;
+        first_name: string | null;
+        last_name: string | null;
         ref_code: string;
         role: string;
+        status: string;
+        usdt_bep20_address: string | null;
+        telegram_user_id: string | null;
       };
     }
   }
 }
 
-// Ensure the same fallback secret used when signing tokens in controllers
-const JWT_SECRET = process.env.JWT_SECRET || 'dev_secret';
+// Get JWT secret from environment
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET) {
+  throw new Error('JWT_SECRET environment variable is required');
+}
 
 export async function authMiddleware(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
+    // Debug logging
+    logger.info(`Auth middleware - cookies: ${JSON.stringify(req.cookies)}`);
+    logger.info(`Auth middleware - headers: ${req.headers.cookie}`);
+    
     // Try to get token from Authorization header first, then from cookies
     let token = req.cookies.auth_token;
     
@@ -33,13 +44,15 @@ export async function authMiddleware(req: Request, res: Response, next: NextFunc
       }
     }
     
+    logger.info(`Auth middleware - token found: ${!!token}`);
+    
     if (!token) {
       res.status(401).json({ error: 'Authentication required' });
       return;
     }
     
-    const decoded = jwt.verify(token, JWT_SECRET) as { userId: string };
-    const user = await DockerAuthService.getUserById(decoded.userId);
+    const decoded = jwt.verify(token, JWT_SECRET as string) as { userId: string };
+    const user = await authService.getUserById(decoded.userId);
     
     if (!user) {
       res.status(401).json({ error: 'User not found' });

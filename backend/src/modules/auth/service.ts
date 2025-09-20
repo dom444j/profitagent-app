@@ -28,6 +28,11 @@ class AuthService {
         return { success: false, error: 'Email already registered' };
       }
       
+      // Validate sponsor code is required
+      if (!data.sponsor_code || !data.sponsor_code.trim()) {
+        return { success: false, error: 'Sponsor code is required' };
+      }
+      
       // Find sponsor by ref_code
       const sponsor = await prisma.user.findUnique({
         where: { ref_code: data.sponsor_code }
@@ -76,7 +81,17 @@ class AuthService {
     try {
       // Find user by email
       const user = await prisma.user.findUnique({
-        where: { email: data.email }
+        where: { email: data.email },
+        select: {
+          id: true,
+          email: true,
+          password_hash: true,
+          first_name: true,
+          last_name: true,
+          ref_code: true,
+          role: true,
+          status: true
+        }
       });
       
       if (!user) {
@@ -104,7 +119,8 @@ class AuthService {
   
   async getUserById(id: string) {
     try {
-      return await prisma.user.findUnique({
+      console.log('Getting user by ID:', id);
+      const user = await prisma.user.findUnique({
         where: { id },
         select: {
           id: true,
@@ -112,9 +128,15 @@ class AuthService {
           first_name: true,
           last_name: true,
           ref_code: true,
-          status: true
+          status: true,
+          role: true,
+          usdt_bep20_address: true,
+          telegram_user_id: true,
+          telegram_link_status: true
         }
       });
+      console.log('User found:', !!user, user ? user.email : 'null');
+      return user;
     } catch (error) {
       console.error('Get user error:', error);
       return null;

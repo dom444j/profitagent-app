@@ -3,8 +3,12 @@ import { DockerAuthService } from './docker-service';
 import * as jwt from 'jsonwebtoken';
 import { logger } from '../../utils/logger';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'dev_secret';
-const JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET || 'dev_refresh';
+const JWT_SECRET = process.env.JWT_SECRET;
+const JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET;
+
+if (!JWT_SECRET || !JWT_REFRESH_SECRET) {
+  throw new Error('JWT_SECRET and JWT_REFRESH_SECRET environment variables are required');
+}
 
 export const dockerRegister = async (req: Request, res: Response) => {
   try {
@@ -32,8 +36,8 @@ export const dockerRegister = async (req: Request, res: Response) => {
     const user = await DockerAuthService.register({
       email,
       password,
-      first_name,
-      last_name,
+      first_name: first_name,
+      last_name: last_name,
       sponsor_code
     });
 

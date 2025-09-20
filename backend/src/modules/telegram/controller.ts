@@ -128,7 +128,7 @@ export const verifyOTP = async (req: Request, res: Response) => {
 // Get OTP statistics
 export const getOTPStats = async (req: Request, res: Response) => {
   try {
-    const stats = telegramService.getOTPStats();
+    const stats = await telegramService.getOTPStats();
     
     return res.json({
       success: true,

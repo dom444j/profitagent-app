@@ -11,9 +11,9 @@ export const useSSE = () => {
   const eventSourceRef = useRef<EventSource | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  const connect = () => {
+  const connect = async () => {
     try {
-      const eventSource = apiService.createSSEConnection();
+      const eventSource = await apiService.createSSEConnection();
       eventSourceRef.current = eventSource;
 
       eventSource.onopen = () => {

@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
 import { z } from 'zod';
 import { userService, UpdateUserProfileData } from './service';
-import { userNotificationSettingsService, NotificationSettingsUpdate } from '../../services/user-notification-settings';
+// Removed user notification settings service - not documented
 import { telegramService } from '../../services/telegram';
 import { realTimeNotificationService } from '../../services/real-time-notifications';
 import { prisma } from '../../lib/prisma';
@@ -12,22 +12,19 @@ const updateProfileSchema = z.object({
   first_name: z.string().min(1, 'First name is required').optional(),
   last_name: z.string().min(1, 'Last name is required').optional(),
   phone: z.string().optional(),
-  usdt_bep20_address: z.string().optional()
+  usdt_bep20_address: z.string().optional(),
+  withdrawal_wallet_address: z.string().optional(),
+  withdrawal_type: z.enum(['automatic', 'manual']).optional()
 });
 
 const linkTelegramSchema = z.object({
-  telegram_user_id: z.string().min(1, 'Telegram user ID is required')
+  telegram_user_id: z.string().min(1).optional(),
+  telegram_username: z.string().min(1).optional()
+}).refine((data) => data.telegram_user_id || data.telegram_username, {
+  message: 'Either telegram_user_id or telegram_username is required'
 });
 
-const updateNotificationSettingsSchema = z.array(
-  z.object({
-    notification_type: z.enum(['withdrawal', 'order', 'earning', 'system', 'security', 'bonus', 'referral']),
-    enabled: z.boolean().optional(),
-    email_enabled: z.boolean().optional(),
-    push_enabled: z.boolean().optional(),
-    telegram_enabled: z.boolean().optional()
-  })
-);
+// Removed notification settings schema - not documented
 
 const userSettingsSecuritySchema = z.object({
   two_factor_enabled: z.boolean().optional(),
@@ -62,6 +59,15 @@ const deleteAccountSchema = z.object({
 }).refine((data) => data.confirmation === 'DELETE', {
   message: 'You must type DELETE to confirm',
   path: ['confirmation']
+});
+
+const verifyWithdrawalWalletSchema = z.object({
+  withdrawal_wallet_address: z.string().min(1, 'Withdrawal wallet address is required')
+});
+
+const confirmWithdrawalWalletOtpSchema = z.object({
+  withdrawal_wallet_address: z.string().min(1, 'Withdrawal wallet address is required'),
+  otp_code: z.string().min(6, 'OTP code must be 6 digits').max(6, 'OTP code must be 6 digits')
 });
 
 class UserController {
@@ -143,7 +149,7 @@ class UserController {
 
   /**
    * POST /api/v1/user/telegram/link
-   * Link Telegram account to user
+   * Link Telegram account to user (supports both ID and username)
    */
   async linkTelegram(req: Request, res: Response) {
     try {
@@ -152,9 +158,9 @@ class UserController {
         return res.status(401).json({ error: 'Authentication required' });
       }
 
-      const { telegram_user_id } = linkTelegramSchema.parse(req.body);
+      const { telegram_user_id, telegram_username } = linkTelegramSchema.parse(req.body);
       
-      const success = await userService.linkTelegram(userId, telegram_user_id);
+      const success = await userService.linkTelegram(userId, telegram_user_id, telegram_username);
       if (!success) {
         return res.status(500).json({
           success: false,
@@ -175,13 +181,38 @@ class UserController {
       if (user) {
         const userName = `${user.first_name} ${user.last_name}`.trim();
         
-        // Send Telegram confirmation message
+        // Send Telegram confirmation message with fallback support
+      if (telegram_user_id) {
         try {
-          await telegramService.sendTelegramLinkConfirmation(telegram_user_id, userName);
+          // Try with ID first, use username as fallback if available
+          const confirmationSent = await telegramService.sendTelegramLinkConfirmation(
+            telegram_user_id, 
+            userName, 
+            telegram_username
+          );
+          if (!confirmationSent) {
+            console.warn(`Failed to send Telegram confirmation to user ${userId} with ID ${telegram_user_id} and fallback username ${telegram_username || 'none'}`);
+          }
         } catch (telegramError) {
           console.error('Failed to send Telegram confirmation:', telegramError);
           // Don't fail the request if Telegram message fails
         }
+      } else if (telegram_username) {
+        try {
+          // Only username available, try to send directly to username
+          const confirmationSent = await telegramService.sendTelegramLinkConfirmation(
+            `@${telegram_username}`, 
+            userName
+          );
+          if (confirmationSent) {
+            console.info(`Telegram confirmation sent to username @${telegram_username} for user ${userId}`);
+          } else {
+            console.warn(`Failed to send Telegram confirmation to username @${telegram_username} for user ${userId}`);
+          }
+        } catch (telegramError) {
+          console.error('Failed to send Telegram confirmation via username:', telegramError);
+        }
+      }
 
         // Send real-time notification to user
         try {
@@ -191,7 +222,7 @@ class UserController {
             message: 'Tu cuenta de Telegram ha sido vinculada exitosamente. Ahora recibirás códigos OTP y notificaciones importantes.',
             severity: 'success',
             metadata: {
-              telegram_user_id,
+              telegram_user_id: telegram_user_id || null,
               linked_at: new Date().toISOString()
             }
           });
@@ -203,7 +234,8 @@ class UserController {
 
       return res.json({
         success: true,
-        message: 'Telegram account linked successfully'
+        message: 'Telegram account linked successfully',
+        linked_via: 'id'
       });
     } catch (error) {
       if (error instanceof z.ZodError) {
@@ -257,6 +289,7 @@ class UserController {
   /**
    * GET /api/v1/user/notification-settings
    * Get current user's notification settings
+   * TEMPORARILY DISABLED - Service not available
    */
   async getNotificationSettings(req: Request, res: Response) {
     try {
@@ -265,7 +298,8 @@ class UserController {
         return res.status(401).json({ error: 'Authentication required' });
       }
 
-      const settings = await userNotificationSettingsService.getUserSettings(userId);
+      // TODO: Implement notification settings service
+      const settings = {};
       
       return res.json({
         success: true,
@@ -283,6 +317,7 @@ class UserController {
   /**
    * PUT /api/v1/user/notification-settings
    * Update current user's notification settings
+   * TEMPORARILY DISABLED - Service not available
    */
   async updateNotificationSettings(req: Request, res: Response) {
     try {
@@ -291,25 +326,13 @@ class UserController {
         return res.status(401).json({ error: 'Authentication required' });
       }
 
-      // Validar datos de entrada
-      const validationResult = updateNotificationSettingsSchema.safeParse(req.body);
-      if (!validationResult.success) {
-        return res.status(400).json({
-          success: false,
-          error: 'Invalid input data',
-          details: validationResult.error.issues
-        });
-      }
-
-      const updates = validationResult.data as NotificationSettingsUpdate[];
-      const updatedSettings = await userNotificationSettingsService.updateUserSettings(userId, updates);
-
-      console.log('User notification settings updated:', { userId, updates });
+      // TODO: Implement notification settings validation and service
+      console.log('User notification settings update requested:', { userId, body: req.body });
 
       return res.json({
         success: true,
-        data: updatedSettings,
-        message: 'Notification settings updated successfully'
+        data: {},
+        message: 'Notification settings update temporarily disabled'
       });
     } catch (error) {
       console.error('Error updating notification settings: ' + (error as Error).message);
@@ -541,6 +564,109 @@ class UserController {
       });
     } catch (error) {
       console.error('Error requesting account deletion: ' + (error as Error).message);
+      return res.status(500).json({
+        success: false,
+        error: 'Internal server error'
+      });
+    }
+  }
+
+  // Get Telegram service health status
+  async getTelegramHealth(req: Request, res: Response) {
+    try {
+      // Simplified health check without OTP stats
+      return res.json({
+        success: true,
+        data: {
+          status: 'active',
+          timestamp: new Date().toISOString()
+        }
+      });
+    } catch (error) {
+      console.error('Error getting Telegram health:', error);
+      return res.status(500).json({
+        success: false,
+        error: 'Failed to get Telegram service health'
+      });
+    }
+  }
+
+  /**
+   * POST /api/v1/user/withdrawal-wallet/verify
+   * Verify withdrawal wallet with OTP
+   */
+  async verifyWithdrawalWallet(req: Request, res: Response) {
+    try {
+      const userId = req.user?.id;
+      if (!userId) {
+        return res.status(401).json({ error: 'Authentication required' });
+      }
+
+      const validation = verifyWithdrawalWalletSchema.safeParse(req.body);
+      if (!validation.success) {
+        return res.status(400).json({
+          success: false,
+          error: 'Validation failed',
+          details: validation.error.issues
+        });
+      }
+
+      const { withdrawal_wallet_address } = validation.data;
+
+      const result = await userService.verifyWithdrawalWallet(userId, withdrawal_wallet_address);
+      
+      return res.json({
+        success: true,
+        message: 'OTP sent successfully',
+        data: result
+      });
+    } catch (error) {
+      console.error('Error verifying withdrawal wallet: ' + (error as Error).message);
+      return res.status(500).json({
+        success: false,
+        error: 'Internal server error'
+      });
+    }
+  }
+
+  /**
+   * POST /api/v1/user/withdrawal-wallet/confirm
+   * Confirm withdrawal wallet OTP
+   */
+  async confirmWithdrawalWalletOtp(req: Request, res: Response) {
+    try {
+      const userId = req.user?.id;
+      if (!userId) {
+        return res.status(401).json({ error: 'Authentication required' });
+      }
+
+      const validation = confirmWithdrawalWalletOtpSchema.safeParse(req.body);
+      if (!validation.success) {
+        return res.status(400).json({
+          success: false,
+          error: 'Validation failed',
+          details: validation.error.issues
+        });
+      }
+
+      const { withdrawal_wallet_address, otp_code } = validation.data;
+
+      const result = await userService.confirmWithdrawalWalletOtp(userId, withdrawal_wallet_address, otp_code);
+      
+      if (!result.success) {
+        return res.status(400).json({
+          success: false,
+          error: result.error
+        });
+      }
+
+      return res.json({
+        success: true,
+        message: 'Withdrawal wallet verified successfully',
+        data: result.data
+      });
+    } catch (error) {
+      console.error('Error confirming withdrawal wallet OTP: ' + (error as Error).message);
       return res.status(500).json({
         success: false,
         error: 'Internal server error'

@@ -1,6 +1,9 @@
 import { prisma } from '../../lib/prisma';
 import { Decimal } from '@prisma/client/runtime/library';
 import { logger } from '../../utils/logger';
+import { Queue } from 'bullmq';
+import Redis from 'ioredis';
+import { adminSettingsService } from './settings.service';
 
 class AdminService {
   async getPendingOrders() {
@@ -282,7 +285,7 @@ class AdminService {
                 id: true,
                 email: true,
                 first_name: true,
-                last_name: true
+        last_name: true
               }
             },
             product: {
@@ -325,8 +328,8 @@ class AdminService {
             name: license.product.name
           },
           principalUSDT: principalUSDT.toFixed(6),
-          daysGenerated: license.days_generated || 0, // 0-20
-          dailyRate: 0.10, // New motor: 10% daily
+          daysGenerated: license.days_generated || 0, // 0-25
+          dailyRate: 0.08, // New motor: 8% daily
           accruedUSDT: accruedUSDT.toFixed(6),
           capUSDT: capUSDT.toFixed(6), // principal * 2
           remainingUSDT: remainingUSDT.toFixed(6),
@@ -340,12 +343,9 @@ class AdminService {
 
       return {
         licenses: formattedLicenses,
-        pagination: {
-          page,
-          limit,
-          total,
-          pages: Math.ceil(total / limit)
-        }
+        total,
+        page,
+        totalPages: Math.ceil(total / limit)
       };
     } catch (error) {
       logger.error('Get licenses error: ' + (error as Error).message);
@@ -813,7 +813,7 @@ class AdminService {
                 id: true,
                 email: true,
                 first_name: true,
-                last_name: true
+        last_name: true
               }
             },
             created_by: {
@@ -963,7 +963,7 @@ class AdminService {
           actor_user_id: adminId,
           old_values: {
             first_name: user.first_name,
-            last_name: user.last_name,
+        last_name: user.last_name,
             email: user.email
           },
           new_values: updateData
@@ -1256,6 +1256,578 @@ class AdminService {
     } catch (error) {
       logger.error('Get recent system activity error: ' + (error as Error).message);
       return [];
+    }
+  }
+
+  async triggerDailyEarnings() {
+    try {
+      // Create Redis connection
+      const redis = new Redis(process.env.REDIS_URL!, {
+        maxRetriesPerRequest: null
+      });
+
+      // Create daily earnings queue
+      const dailyEarningsQueue = new Queue('dailyEarnings', {
+        connection: redis
+      });
+
+      // Add job to queue for immediate processing
+      const job = await dailyEarningsQueue.add('processDailyEarnings', {}, {
+        priority: 1, // High priority for manual trigger
+        removeOnComplete: 10,
+        removeOnFail: 5
+      });
+
+      logger.info(`Manual daily earnings job triggered with ID: ${job.id}`);
+
+      // Close connections
+      await dailyEarningsQueue.close();
+      await redis.quit();
+
+      return {
+        jobId: job.id,
+        message: 'Daily earnings processing job added to queue'
+      };
+    } catch (error) {
+      logger.error('Trigger daily earnings error: ' + (error as Error).message);
+      throw error;
+    }
+  }
+
+  // Activate a pending license manually
+  async activateLicense(licenseId: string, adminId: string) {
+    try {
+      const license = await prisma.userLicense.findUnique({
+        where: { id: licenseId },
+        include: {
+          user: {
+            select: {
+              email: true
+            }
+          },
+          product: {
+            select: {
+              name: true
+            }
+          }
+        }
+      });
+
+      if (!license) {
+        return null;
+      }
+
+      if (license.status === 'active') {
+        throw new Error('License is already active');
+      }
+
+      // Update license to active status and set started_at to now
+      const activatedLicense = await prisma.userLicense.update({
+        where: { id: licenseId },
+        data: {
+          status: 'active',
+          started_at: new Date() // Set activation time
+        }
+      });
+
+      // Create audit log
+      await prisma.auditLog.create({
+        data: {
+          actor_user_id: adminId,
+          action: 'activate_license',
+          entity: 'license',
+          entity_id: licenseId,
+          old_values: { status: 'pending' },
+          new_values: { status: 'active', started_at: new Date() },
+          diff: { 
+            status: { from: 'pending', to: 'active' },
+            started_at: { from: null, to: new Date().toISOString() }
+          }
+        }
+      });
+
+      logger.info({
+        licenseId,
+        adminId,
+        userEmail: license.user.email,
+        productName: license.product.name
+      }, 'License activated manually by admin');
+
+      return activatedLicense;
+    } catch (error) {
+      logger.error('Activate license error: ' + (error as Error).message);
+      throw error;
+    }
+  }
+
+  // Manually adjust license active days
+  async adjustLicenseDays(licenseId: string, newDays: number, reason: string, adminId: string) {
+    try {
+      const license = await prisma.userLicense.findUnique({
+        where: { id: licenseId },
+        include: {
+          user: {
+            select: {
+              email: true
+            }
+          },
+          product: {
+            select: {
+              name: true,
+              price_usdt: true
+            }
+          }
+        }
+      });
+
+      if (!license) {
+        return null;
+      }
+
+      // Get admin settings for calculations
+      const adminSettings = await adminSettingsService.getSettings();
+      const dailyRate = adminSettings.system.daily_earning_rate;
+      const maxDays = adminSettings.system.max_earning_days;
+      const earningCapPercentage = adminSettings.system.earning_cap_percentage;
+
+      // Validate new days don't exceed maximum
+      if (newDays > maxDays) {
+        throw new Error(`Days cannot exceed maximum of ${maxDays}`);
+      }
+
+      const oldDays = license.days_generated || 0;
+      const principalUSDT = Number(license.product.price_usdt);
+      const dailyAmount = principalUSDT * dailyRate;
+
+      // Calculate new accumulated values
+      const totalEarnedUSDT = newDays * dailyAmount;
+      const cashbackDays = Math.min(newDays, 13);
+          const potentialDays = Math.max(0, newDays - 13);
+      const cashbackAccum = cashbackDays * dailyAmount;
+      const potentialAccum = potentialDays * dailyAmount;
+
+      // Check if license should be completed
+      const capUSDT = principalUSDT * earningCapPercentage;
+      const shouldComplete = newDays >= maxDays || totalEarnedUSDT >= capUSDT;
+      const newStatus = shouldComplete ? 'completed' : license.status;
+
+      // Update license in transaction
+      const updatedLicense = await prisma.$transaction(async (tx) => {
+        // Update license
+        const updated = await tx.userLicense.update({
+          where: { id: licenseId },
+          data: {
+            days_generated: newDays,
+            total_earned_usdt: new Decimal(totalEarnedUSDT),
+            cashback_accum: new Decimal(cashbackAccum),
+            potential_accum: new Decimal(potentialAccum),
+            status: newStatus
+          }
+        });
+
+        // If days were reduced, remove excess daily earnings
+        if (newDays < oldDays) {
+          await tx.licenseDailyEarning.deleteMany({
+            where: {
+              license_id: licenseId,
+              day_index: {
+                gt: newDays
+              }
+            }
+          });
+        }
+        // If days were increased, create missing daily earnings
+        else if (newDays > oldDays) {
+          const startDate = new Date(license.started_at);
+          const earningsToCreate = [];
+
+          for (let day = oldDays + 1; day <= newDays; day++) {
+            const earningDate = new Date(startDate);
+            earningDate.setDate(earningDate.getDate() + day - 1);
+            earningDate.setHours(0, 0, 0, 0);
+
+            // Check if earning already exists
+            const existingEarning = await tx.licenseDailyEarning.findFirst({
+              where: {
+                license_id: licenseId,
+                earning_date: earningDate
+              }
+            });
+
+            if (!existingEarning) {
+              earningsToCreate.push({
+                license_id: licenseId,
+                day_index: day,
+                cashback_amount: new Decimal(dailyAmount),
+                potential_amount: new Decimal(dailyAmount),
+                applied_to_balance: true,
+                earning_date: earningDate,
+                applied_at: new Date()
+              });
+            }
+          }
+
+          if (earningsToCreate.length > 0) {
+            await tx.licenseDailyEarning.createMany({
+              data: earningsToCreate
+            });
+          }
+
+          // Create ledger entries for new earnings
+          for (let day = oldDays + 1; day <= newDays; day++) {
+            await tx.ledgerEntry.create({
+              data: {
+                user_id: license.user_id,
+                amount: new Decimal(dailyAmount),
+                direction: 'credit',
+                ref_type: 'earning',
+                ref_id: license.id,
+                meta: {
+                  description: `Manual adjustment - Daily earning from ${license.product.name} (Day ${day})`,
+                  licenseId: license.id,
+                  productName: license.product.name,
+                  dayIndex: day,
+                  adjustmentReason: reason
+                }
+              }
+            });
+          }
+        }
+
+        // Create audit log
+        await tx.auditLog.create({
+          data: {
+            actor_user_id: adminId,
+            action: 'adjust_license_days',
+            entity: 'license',
+            entity_id: licenseId,
+            old_values: { 
+              days_generated: oldDays,
+              total_earned_usdt: license.total_earned_usdt,
+              status: license.status
+            },
+            new_values: { 
+              days_generated: newDays,
+              total_earned_usdt: totalEarnedUSDT,
+              status: newStatus
+            },
+            diff: { 
+              days_generated: { from: oldDays, to: newDays },
+              total_earned_usdt: { from: Number(license.total_earned_usdt), to: totalEarnedUSDT },
+              status: { from: license.status, to: newStatus },
+              reason: reason
+            }
+          }
+        });
+
+        return updated;
+      });
+
+      logger.info({
+        licenseId,
+        adminId,
+        userEmail: license.user.email,
+        productName: license.product.name,
+        oldDays,
+        newDays,
+        reason
+      }, 'License days adjusted manually by admin');
+
+      return updatedLicense;
+    } catch (error) {
+      logger.error('Adjust license days error: ' + (error as Error).message);
+      throw error;
+    }
+  }
+
+  // Adjust license timing (countdown)
+  async adjustLicenseTiming(licenseId: string, totalMinutes: number, reason: string, adminId: string) {
+    try {
+      const license = await prisma.userLicense.findUnique({
+        where: { id: licenseId },
+        include: {
+          user: {
+            select: {
+              email: true
+            }
+          },
+          product: {
+            select: {
+              name: true,
+              price_usdt: true
+            }
+          }
+        }
+      });
+
+      if (!license) {
+        return null;
+      }
+
+      // Only allow timing adjustment for active licenses
+      if (license.status !== 'active') {
+        throw new Error('Only active licenses can have their timing adjusted');
+      }
+
+      const oldStartedAt = new Date(license.started_at);
+      const newStartedAt = new Date(oldStartedAt.getTime() + (totalMinutes * 60 * 1000));
+
+      // Validate that the new started_at is not in the future beyond reasonable limits
+      const now = new Date();
+      const maxFutureTime = new Date(now.getTime() + (24 * 60 * 60 * 1000)); // 24 hours from now
+      
+      if (newStartedAt > maxFutureTime) {
+        throw new Error('Cannot set license start time more than 24 hours in the future');
+      }
+
+      // Update license in transaction
+      const updatedLicense = await prisma.$transaction(async (tx) => {
+        // Update license started_at
+        const updated = await tx.userLicense.update({
+          where: { id: licenseId },
+          data: {
+            started_at: newStartedAt
+          }
+        });
+
+        // Create audit log
+        await tx.auditLog.create({
+          data: {
+            actor_user_id: adminId,
+            action: 'adjust_license_timing',
+            entity: 'license',
+            entity_id: licenseId,
+            old_values: { 
+              started_at: oldStartedAt.toISOString()
+            },
+            new_values: { 
+              started_at: newStartedAt.toISOString()
+            },
+            diff: { 
+              started_at: { from: oldStartedAt.toISOString(), to: newStartedAt.toISOString() },
+              adjustment_minutes: totalMinutes,
+              reason: reason
+            }
+          }
+        });
+
+        return updated;
+      });
+
+      logger.info({
+        licenseId,
+        adminId,
+        userEmail: license.user.email,
+        productName: license.product.name,
+        oldStartedAt: oldStartedAt.toISOString(),
+        newStartedAt: newStartedAt.toISOString(),
+        adjustmentMinutes: totalMinutes,
+        reason
+      }, 'License timing adjusted manually by admin');
+
+      return updatedLicense;
+    } catch (error) {
+      logger.error('Adjust license timing error: ' + (error as Error).message);
+      throw error;
+    }
+  }
+
+  // Process earnings for a specific license
+  async processLicenseEarnings(licenseId: string, force: boolean, adminId: string) {
+    try {
+      const license = await prisma.userLicense.findUnique({
+        where: { id: licenseId },
+        include: {
+          user: {
+            select: {
+              id: true,
+              email: true
+            }
+          },
+          product: {
+            select: {
+              id: true,
+              name: true,
+              price_usdt: true
+            }
+          }
+        }
+      });
+
+      if (!license) {
+        return null;
+      }
+
+      if (license.status !== 'active') {
+        throw new Error('License is not active');
+      }
+
+      // Get admin settings
+      const adminSettings = await adminSettingsService.getSettings();
+      const dailyRate = adminSettings.system.daily_earning_rate;
+      const maxDays = adminSettings.system.max_earning_days;
+      const earningCapPercentage = adminSettings.system.earning_cap_percentage;
+
+      const principalUSDT = Number(license.product.price_usdt);
+      const currentDays = license.days_generated || 0;
+      const accruedUSDT = currentDays * (principalUSDT * dailyRate);
+      const capUSDT = principalUSDT * earningCapPercentage;
+
+      // Check if license has reached limits
+      if (currentDays >= maxDays || accruedUSDT >= capUSDT) {
+        throw new Error('License has already reached maximum days or earning cap');
+      }
+
+      const nextDay = currentDays + 1;
+      const startDate = new Date(license.started_at);
+      const earningDate = new Date(startDate);
+      earningDate.setDate(earningDate.getDate() + nextDay - 1);
+      earningDate.setHours(0, 0, 0, 0);
+
+      // Check 24-hour rule unless forced
+      if (!force) {
+        const now = new Date();
+        const hoursSinceActivation = (now.getTime() - startDate.getTime()) / (1000 * 60 * 60);
+        
+        if (hoursSinceActivation < 24) {
+          throw new Error(`License activated only ${hoursSinceActivation.toFixed(2)} hours ago. Must wait 24 hours or use force option.`);
+        }
+        
+        if (earningDate > now) {
+          throw new Error('Earning date is in the future');
+        }
+      }
+
+      // Check for existing earning
+      const existingEarning = await prisma.licenseDailyEarning.findFirst({
+        where: {
+          license_id: licenseId,
+          earning_date: earningDate
+        }
+      });
+
+      if (existingEarning && !force) {
+        throw new Error('Earnings already processed for this day. Use force option to override.');
+      }
+
+      const dailyAmount = principalUSDT * dailyRate;
+      const licenseFlags = license.flags as any || {};
+      const shouldPausePotential = licenseFlags.pause_potential === true;
+      const appliedToBalance = !shouldPausePotential;
+
+      // Process earning in transaction
+      const result = await prisma.$transaction(async (tx) => {
+        // Delete existing earning if forcing
+        if (existingEarning && force) {
+          await tx.licenseDailyEarning.delete({
+            where: { id: existingEarning.id }
+          });
+        }
+
+        // Create new earning record
+        const newEarning = await tx.licenseDailyEarning.create({
+          data: {
+            license_id: licenseId,
+            day_index: nextDay,
+            cashback_amount: new Decimal(dailyAmount),
+            potential_amount: new Decimal(dailyAmount),
+            applied_to_balance: appliedToBalance,
+            earning_date: earningDate,
+            applied_at: appliedToBalance ? new Date() : null
+          }
+        });
+
+        // Calculate accumulated values
+        const totalEarnedUSDT = nextDay * dailyAmount;
+        const cashbackDays = Math.min(nextDay, 13);
+      const potentialDays = Math.max(0, nextDay - 13);
+        const cashbackAccum = cashbackDays * dailyAmount;
+        const potentialAccum = potentialDays * dailyAmount;
+
+        // Check if license should be completed
+        const shouldComplete = nextDay >= maxDays || totalEarnedUSDT >= capUSDT;
+        const newStatus = shouldComplete ? 'completed' : 'active';
+
+        // Update license
+        const updatedLicense = await tx.userLicense.update({
+          where: { id: licenseId },
+          data: {
+            days_generated: nextDay,
+            total_earned_usdt: new Decimal(totalEarnedUSDT),
+            cashback_accum: new Decimal(cashbackAccum),
+            potential_accum: new Decimal(potentialAccum),
+            status: newStatus
+          }
+        });
+
+        // Create ledger entry if applied to balance
+        if (appliedToBalance) {
+          await tx.ledgerEntry.create({
+            data: {
+              user_id: license.user_id,
+              amount: new Decimal(dailyAmount),
+              direction: 'credit',
+              ref_type: 'earning',
+              ref_id: licenseId,
+              meta: {
+                description: `Manual processing - Daily earning from ${license.product.name} (Day ${nextDay})`,
+                licenseId: licenseId,
+                productName: license.product.name,
+                dayIndex: nextDay,
+                processedBy: 'admin',
+                forced: force
+              }
+            }
+          });
+        }
+
+        // Create audit log
+        await tx.auditLog.create({
+          data: {
+            actor_user_id: adminId,
+            action: 'process_license_earnings',
+            entity: 'license',
+            entity_id: licenseId,
+            old_values: {
+              days_generated: currentDays,
+              total_earned_usdt: license.total_earned_usdt,
+              status: license.status
+            },
+            new_values: {
+              days_generated: nextDay,
+              total_earned_usdt: totalEarnedUSDT,
+              status: newStatus
+            },
+            diff: {
+              days_generated: { from: currentDays, to: nextDay },
+              total_earned_usdt: { from: Number(license.total_earned_usdt), to: totalEarnedUSDT },
+              status: { from: license.status, to: newStatus },
+              forced: force
+            }
+          }
+        });
+
+        return {
+          license: updatedLicense,
+          earning: newEarning,
+          completed: shouldComplete
+        };
+      });
+
+      logger.info({
+        licenseId,
+        adminId,
+        userEmail: license.user.email,
+        productName: license.product.name,
+        dayProcessed: nextDay,
+        amount: dailyAmount,
+        forced: force
+      }, 'License earnings processed manually by admin');
+
+      return result;
+    } catch (error) {
+      logger.error('Process license earnings error: ' + (error as Error).message);
+      throw error;
     }
   }
 }

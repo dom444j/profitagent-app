@@ -137,7 +137,7 @@ const OrderModal: React.FC<OrderModalProps> = ({
               <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl p-4">
                 <div className="flex items-center gap-3 mb-2">
                   <div className="w-8 h-8 bg-blue-500 rounded-lg flex items-center justify-center">
-                    <span className="text-white text-sm font-bold">🤖</span>
+                    <span className="text-white text-sm font-bold">ðŸ¤–</span>
                   </div>
                   <div>
                     <p className="text-sm font-medium text-gray-600">Producto</p>
@@ -149,7 +149,7 @@ const OrderModal: React.FC<OrderModalProps> = ({
               <div className="bg-gradient-to-r from-emerald-50 to-green-50 rounded-xl p-4">
                 <div className="flex items-center gap-3 mb-2">
                   <div className="w-8 h-8 bg-emerald-500 rounded-lg flex items-center justify-center">
-                    <span className="text-white text-sm font-bold">💰</span>
+                    <span className="text-white text-sm font-bold">ðŸ’°</span>
                   </div>
                   <div>
                     <p className="text-sm font-medium text-gray-600">Monto a Pagar</p>
@@ -167,7 +167,7 @@ const OrderModal: React.FC<OrderModalProps> = ({
                 </div>
                 <div>
                   <h3 className="font-bold text-gray-900">Dirección de Pago (BEP20)</h3>
-                  <p className="text-sm text-gray-600">Envía exactamente {formatUSDTDisplay(order.amount_usdt)} USDT a esta dirección</p>
+                <p className="text-sm text-gray-600">Envía exactamente {formatUSDTDisplay(order.amount_usdt)} USDT a esta dirección</p>
                 </div>
               </div>
               
@@ -203,10 +203,10 @@ const OrderModal: React.FC<OrderModalProps> = ({
                   <h3 className="font-bold text-amber-800 mb-2">⚠️ Instrucciones Importantes</h3>
                   <ul className="text-sm text-amber-700 space-y-1">
                     <li>• Envía <strong>exactamente {formatUSDTDisplay(order.amount_usdt)} USDT</strong> (red BEP20/BSC)</li>
-                    <li>• Usa solo <strong>USDT BEP20</strong> - otras redes no serán procesadas</li>
-                    <li>• Copia el hash de transacción después del envío</li>
-                    <li>• La orden expira en <strong>30 minutos</strong></li>
-                    <li>• El bot de arbitraje se activará tras la confirmación</li>
+                <li>• Usa solo <strong>USDT BEP20</strong> - otras redes no serán procesadas</li>
+                <li>• Copia el hash de transacción después del envío</li>
+                <li>• La orden expira en <strong>30 minutos</strong></li>
+                <li>• El bot de arbitraje se activará tras la confirmación</li>
                   </ul>
                 </div>
               </div>
@@ -215,7 +215,7 @@ const OrderModal: React.FC<OrderModalProps> = ({
             {/* Transaction Hash Input */}
             <div className="bg-gradient-to-r from-cyan-50 to-blue-50 rounded-xl p-6">
               <h3 className="font-bold text-gray-900 mb-3 flex items-center gap-2">
-                <span className="text-cyan-600">📤</span>
+                <span className="text-cyan-600">ðŸ“¤</span>
                 Confirmar Transacción
               </h3>
               <p className="text-sm text-gray-600 mb-4">
@@ -271,7 +271,7 @@ const OrderModal: React.FC<OrderModalProps> = ({
                   </div>
                   <div>
                     <p className="font-medium text-yellow-800">Transacción Enviada</p>
-                    <p className="text-sm text-yellow-700">Tu pago está siendo verificado por nuestro equipo</p>
+                <p className="text-sm text-yellow-700">Tu pago está siendo verificado por nuestro equipo</p>
                   </div>
                 </div>
               </div>
@@ -296,7 +296,7 @@ const OrderModal: React.FC<OrderModalProps> = ({
           <div className="bg-gray-50 px-6 py-4 rounded-b-2xl">
             <div className="flex items-center justify-between text-sm text-gray-600">
               <span>Orden #{order.id.slice(-8)}</span>
-              <span>Soporte: support@grow5x.app</span>
+              <span>Soporte: support@profitagent.app</span>
             </div>
           </div>
         </div>

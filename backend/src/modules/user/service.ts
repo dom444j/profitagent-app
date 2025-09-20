@@ -3,12 +3,15 @@ import { logger } from '../../utils/logger';
 import { Decimal } from '@prisma/client/runtime/library';
 import * as bcrypt from 'bcryptjs';
 import type { Prisma } from '@prisma/client';
+import type { User } from '@prisma/client';
 
 export interface UpdateUserProfileData {
   first_name?: string;
   last_name?: string;
   phone?: string;
   usdt_bep20_address?: string;
+  withdrawal_wallet_address?: string;
+  withdrawal_type?: 'automatic' | 'manual';
 }
 
 export interface UserProfileResponse {
@@ -19,7 +22,11 @@ export interface UserProfileResponse {
   phone: string | null;
   ref_code: string;
   usdt_bep20_address: string | null;
+  withdrawal_wallet_address: string | null;
+  withdrawal_wallet_verified: boolean;
+  withdrawal_type: 'automatic' | 'manual';
   telegram_user_id: string | null;
+  telegram_username: string | null;
   telegram_link_status: string | null;
   status: string;
   role: string;
@@ -70,7 +77,11 @@ class UserService {
         phone: user.phone,
         ref_code: user.ref_code,
         usdt_bep20_address: user.usdt_bep20_address,
+        withdrawal_wallet_address: user.withdrawal_wallet_address,
+        withdrawal_wallet_verified: user.withdrawal_wallet_verified || false,
+        withdrawal_type: (user.withdrawal_type as 'automatic' | 'manual') || 'manual',
         telegram_user_id: user.telegram_user_id,
+        telegram_username: user.telegram_username,
         telegram_link_status: user.telegram_link_status,
         status: user.status,
         role: user.role,
@@ -98,6 +109,8 @@ class UserService {
       if (data.last_name !== undefined) updateData.last_name = data.last_name;
       if (data.phone !== undefined) updateData.phone = data.phone;
       if (data.usdt_bep20_address !== undefined) updateData.usdt_bep20_address = data.usdt_bep20_address;
+      if (data.withdrawal_wallet_address !== undefined) updateData.withdrawal_wallet_address = data.withdrawal_wallet_address;
+      if (data.withdrawal_type !== undefined) updateData.withdrawal_type = data.withdrawal_type;
 
       const updatedUser = await prisma.user.update({
         where: { id: userId },
@@ -144,7 +157,11 @@ class UserService {
         phone: updatedUser.phone,
         ref_code: updatedUser.ref_code,
         usdt_bep20_address: updatedUser.usdt_bep20_address,
+        withdrawal_wallet_address: updatedUser.withdrawal_wallet_address,
+        withdrawal_wallet_verified: updatedUser.withdrawal_wallet_verified,
+        withdrawal_type: (updatedUser.withdrawal_type as 'automatic' | 'manual') || 'manual',
         telegram_user_id: updatedUser.telegram_user_id,
+        telegram_username: updatedUser.telegram_username,
         telegram_link_status: updatedUser.telegram_link_status,
         status: updatedUser.status,
         role: updatedUser.role,
@@ -163,19 +180,27 @@ class UserService {
   }
 
   /**
-   * Link Telegram account to user
+   * Link Telegram account to user (supports both ID and username)
    */
-  async linkTelegram(userId: string, telegramUserId: string): Promise<boolean> {
+  async linkTelegram(userId: string, telegramUserId?: string, telegramUsername?: string): Promise<boolean> {
     try {
+      // Clean username by removing @ if present
+      const cleanUsername = telegramUsername ? telegramUsername.replace('@', '') : undefined;
+      
       await prisma.user.update({
         where: { id: userId },
         data: {
-          telegram_user_id: telegramUserId,
+          telegram_user_id: telegramUserId || null,
+          telegram_username: cleanUsername || null,
           telegram_link_status: 'linked'
         }
       });
 
-      logger.info({ userId, telegramUserId }, 'Telegram account linked');
+      logger.info({ 
+        userId, 
+        telegramUserId: telegramUserId || null, 
+        telegramUsername: cleanUsername || null 
+      }, 'Telegram account linked');
       return true;
     } catch (error) {
       logger.error('Error linking Telegram account: ' + (error as Error).message);
@@ -192,6 +217,7 @@ class UserService {
         where: { id: userId },
         data: {
           telegram_user_id: null,
+          telegram_username: null,
           telegram_link_status: 'unlinked'
         }
       });
@@ -521,6 +547,59 @@ class UserService {
     } catch (error) {
       logger.error('Error updating user password: ' + (error as Error).message);
       throw error;
+    }
+  }
+
+  /**
+   * Verify withdrawal wallet (simplified without OTP)
+   */
+  async verifyWithdrawalWallet(userId: string, withdrawalWalletAddress: string): Promise<{ otp_sent: boolean }> {
+    try {
+      // Update user's withdrawal wallet directly
+      await prisma.user.update({
+        where: { id: userId },
+        data: {
+          withdrawal_wallet_address: withdrawalWalletAddress,
+          withdrawal_wallet_verified: true,
+          withdrawal_wallet_verified_at: new Date()
+        }
+      });
+
+      logger.info({ userId, withdrawalWalletAddress }, 'Withdrawal wallet verified successfully');
+      return { otp_sent: true };
+    } catch (error) {
+      logger.error({ userId, withdrawalWalletAddress, error }, 'Failed to verify withdrawal wallet');
+      return { otp_sent: false };
+    }
+  }
+
+  /**
+   * Confirm withdrawal wallet OTP (simplified - directly verifies)
+   */
+  async confirmWithdrawalWalletOtp(userId: string, withdrawalWalletAddress: string, otpCode: string): Promise<{ success: boolean; error?: string; data?: any }> {
+    try {
+      // Since OTP system is removed, directly verify the wallet
+      const updatedUser = await prisma.user.update({
+        where: { id: userId },
+        data: {
+          withdrawal_wallet_address: withdrawalWalletAddress,
+          withdrawal_wallet_verified: true,
+          withdrawal_wallet_verified_at: new Date()
+        }
+      });
+
+      logger.info({ userId, withdrawalWalletAddress }, 'Withdrawal wallet verified successfully');
+
+      return {
+        success: true,
+        data: {
+          withdrawal_wallet_address: updatedUser.withdrawal_wallet_address,
+          withdrawal_wallet_verified: updatedUser.withdrawal_wallet_verified
+        }
+      };
+    } catch (error) {
+      logger.error({ userId, withdrawalWalletAddress, error }, 'Failed to confirm withdrawal wallet');
+      return { success: false, error: 'Failed to verify withdrawal wallet' };
     }
   }
 }

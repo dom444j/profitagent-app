@@ -23,12 +23,13 @@ interface SystemSettings {
   withdrawalEnabled: boolean;
   minimumWithdrawal: number;
   maximumWithdrawal: number;
-  withdrawalFeeUsdt: number;
   systemFeePercentage: number;
   dailyEarningRate: number;
   maxEarningDays: number;
   earningCapPercentage: number;
   passwordMinLength: number;
+  automaticOrderProcessing: boolean;
+  automaticDailyEarningsProcessing: boolean;
 }
 
 interface SecuritySettings {
@@ -71,12 +72,13 @@ const AdminSettingsPage: React.FC = () => {
     withdrawalEnabled: true,
     minimumWithdrawal: 10,
     maximumWithdrawal: 10000,
-    withdrawalFeeUsdt: 2,
     systemFeePercentage: 10,
-    dailyEarningRate: 10,
+    dailyEarningRate: 8,
     maxEarningDays: 20,
     earningCapPercentage: 200,
-    passwordMinLength: 8
+    passwordMinLength: 8,
+    automaticOrderProcessing: false,
+    automaticDailyEarningsProcessing: false
   });
   
   const [securitySettings, setSecuritySettings] = useState<SecuritySettings>({
@@ -113,12 +115,13 @@ const AdminSettingsPage: React.FC = () => {
           withdrawalEnabled: system.withdrawal_enabled ?? true,
           minimumWithdrawal: parseFloat(system.min_withdrawal_amount) || 10,
           maximumWithdrawal: parseFloat(system.maximum_withdrawal) || 10000,
-          withdrawalFeeUsdt: parseFloat(system.withdrawal_fee_usdt) || 2,
           systemFeePercentage: (parseFloat(system.referral_commission_rate) * 100) || 10,
-          dailyEarningRate: (parseFloat(system.daily_earning_rate) * 100) || 10,
+          dailyEarningRate: (parseFloat(system.daily_earning_rate) * 100) || 8,
           maxEarningDays: parseInt(system.max_earning_days) || 20,
           earningCapPercentage: (parseFloat(system.earning_cap_percentage) * 100) || 200,
-          passwordMinLength: parseInt(system.password_min_length) || 8
+          passwordMinLength: parseInt(system.password_min_length) || 8,
+          automaticOrderProcessing: system.automatic_order_processing || false,
+          automaticDailyEarningsProcessing: system.automatic_daily_earnings_processing ?? true
         });
         
         setSecuritySettings({
@@ -194,7 +197,6 @@ const AdminSettingsPage: React.FC = () => {
           const systemData = {
             maintenance_mode: systemSettings.maintenanceMode,
             min_withdrawal_amount: systemSettings.minimumWithdrawal,
-            withdrawal_fee_usdt: systemSettings.withdrawalFeeUsdt,
             referral_commission_rate: systemSettings.systemFeePercentage / 100,
             daily_earning_rate: systemSettings.dailyEarningRate / 100,
             max_earning_days: systemSettings.maxEarningDays,
@@ -202,7 +204,9 @@ const AdminSettingsPage: React.FC = () => {
             registration_enabled: systemSettings.registrationEnabled,
             withdrawal_enabled: systemSettings.withdrawalEnabled,
             maximum_withdrawal: systemSettings.maximumWithdrawal,
-            password_min_length: systemSettings.passwordMinLength
+            password_min_length: systemSettings.passwordMinLength,
+            automatic_order_processing: systemSettings.automaticOrderProcessing,
+            automatic_daily_earnings_processing: systemSettings.automaticDailyEarningsProcessing
           };
           response = await apiService.updateAdminSystemSettings(systemData);
           break;
@@ -322,7 +326,7 @@ const AdminSettingsPage: React.FC = () => {
                       <div className="flex items-center justify-between p-4 bg-slate-50 rounded-lg">
                         <div>
                           <label className="text-sm font-medium text-slate-700">Modo Mantenimiento</label>
-                          <p className="text-xs text-slate-500">Deshabilita el acceso de usuarios</p>
+                          <p className="text-xs text-slate-500">Pausa el procesamiento automático de ganancias diarias y deshabilita el acceso de usuarios</p>
                         </div>
                         <label className="relative inline-flex items-center cursor-pointer">
                           <input
@@ -366,6 +370,38 @@ const AdminSettingsPage: React.FC = () => {
                           <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
                         </label>
                       </div>
+                      
+                      <div className="flex items-center justify-between p-4 bg-slate-50 rounded-lg">
+                        <div>
+                          <label className="text-sm font-medium text-slate-700">Procesamiento Automático de Órdenes</label>
+                          <p className="text-xs text-slate-500">Procesa automáticamente las órdenes pagadas sin intervención manual</p>
+                        </div>
+                        <label className="relative inline-flex items-center cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={systemSettings.automaticOrderProcessing}
+                            onChange={(e) => setSystemSettings(prev => ({ ...prev, automaticOrderProcessing: e.target.checked }))}
+                            className="sr-only peer"
+                          />
+                          <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                        </label>
+                      </div>
+                      
+                      <div className="flex items-center justify-between p-4 bg-slate-50 rounded-lg">
+                        <div>
+                          <label className="text-sm font-medium text-slate-700">Procesamiento Automático de Ganancias</label>
+                          <p className="text-xs text-slate-500">Procesa automáticamente las ganancias diarias de licencias cada hora</p>
+                        </div>
+                        <label className="relative inline-flex items-center cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={systemSettings.automaticDailyEarningsProcessing}
+                            onChange={(e) => setSystemSettings(prev => ({ ...prev, automaticDailyEarningsProcessing: e.target.checked }))}
+                            className="sr-only peer"
+                          />
+                          <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                        </label>
+                      </div>
                     </div>
                   </div>
 
@@ -401,18 +437,7 @@ const AdminSettingsPage: React.FC = () => {
                         />
                       </div>
                       
-                      <div className="space-y-2">
-                        <label className="text-sm font-medium text-slate-700">Fee de Retiro (USDT)</label>
-                        <input
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          value={systemSettings.withdrawalFeeUsdt}
-                          onChange={(e) => setSystemSettings(prev => ({ ...prev, withdrawalFeeUsdt: parseFloat(e.target.value) || 0 }))}
-                          className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        />
-                        <p className="text-xs text-slate-500">Fee fijo en USDT aplicado a cada retiro (gas agent)</p>
-                      </div>
+
                       
                       <div className="space-y-2">
                         <label className="text-sm font-medium text-slate-700">Comisión del Sistema (%)</label>
@@ -452,7 +477,7 @@ const AdminSettingsPage: React.FC = () => {
                           onChange={(e) => setSystemSettings(prev => ({ ...prev, maxEarningDays: parseInt(e.target.value) || 0 }))}
                           className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                         />
-                        <p className="text-xs text-slate-500">Número máximo de días que una herramienta puede procesar datos (actualmente 20 días)</p>
+                        <p className="text-xs text-slate-500">Número máximo de días que una herramienta puede procesar datos (actualmente 25 días)</p>
                       </div>
                       
                       <div className="space-y-2">

@@ -19,6 +19,111 @@ interface User {
 
 
 
+// Utility functions
+const formatDate = (dateString: string) => {
+  return new Date(dateString).toLocaleDateString('es-ES', {
+    day: '2-digit',
+    month: '2-digit'
+  });
+};
+
+const formatUSDTDisplay = (amount: string | number) => {
+  const num = typeof amount === 'string' ? parseFloat(amount) : amount;
+  return num.toFixed(2);
+};
+
+// Earning Calendar Component for Admin
+interface AdminEarningCalendarProps {
+  earnings: any[];
+  licenseName: string;
+}
+
+const AdminEarningCalendar: React.FC<AdminEarningCalendarProps> = ({ earnings, licenseName }) => {
+  return (
+    <div className="space-y-4">
+      <h5 className="text-lg font-bold text-slate-800">📅 Calendario de Ganancias - {licenseName}</h5>
+      
+      {/* Phase Legend */}
+      <div className="flex flex-col sm:flex-row gap-3 mb-4">
+        <div className="flex items-center gap-2">
+          <div className="w-3 h-3 bg-gradient-to-r from-green-400 to-emerald-500 rounded-full"></div>
+          <span className="text-sm font-bold text-green-700">💰 Fase Cashback (Días 1-13)</span>
+          <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded-full font-semibold">Se aplica al balance</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="w-3 h-3 bg-gradient-to-r from-purple-400 to-violet-500 rounded-full"></div>
+          <span className="text-sm font-bold text-purple-700">🚀 Fase Potencial (Días 14-25)</span>
+          <span className="text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded-full font-semibold">Se libera al completar</span>
+        </div>
+      </div>
+
+      {/* 25-Day Calendar Grid */}
+      <div className="grid grid-cols-5 sm:grid-cols-10 lg:grid-cols-12 xl:grid-cols-13 gap-1">
+        {Array.from({ length: 25 }, (_, index) => {
+          const dayNumber = index + 1;
+          const earning = earnings.find(e => e.day_index === dayNumber);
+          const isCashbackPhase = dayNumber <= 13;
+          
+          return (
+            <div
+              key={dayNumber}
+              className={`p-1 rounded border text-center transition-all duration-300 min-h-[60px] text-xs ${
+                earning
+                  ? isCashbackPhase
+                    ? 'bg-gradient-to-br from-green-50 to-emerald-50 border-green-300'
+                    : 'bg-gradient-to-br from-purple-50 to-violet-50 border-purple-300'
+                  : isCashbackPhase
+                  ? 'bg-white border-green-100'
+                  : 'bg-white border-purple-100'
+              }`}
+            >
+              <div className={`text-[9px] font-bold mb-1 ${
+                isCashbackPhase ? 'text-green-600' : 'text-purple-600'
+              }`}>
+                Día {dayNumber}
+              </div>
+              {earning ? (
+                <>
+                  <div className="flex items-center justify-center mb-1">
+                    <span className={`text-xs ${
+                      isCashbackPhase ? 'text-green-500' : 'text-purple-500'
+                    }`}>✅</span>
+                  </div>
+                  <div className={`text-[9px] font-bold mb-1 ${
+                    isCashbackPhase ? 'text-green-700' : 'text-purple-700'
+                  }`}>
+                    ${formatUSDTDisplay(earning.amount_usdt)}
+                  </div>
+                  <div className={`text-[8px] ${
+                    isCashbackPhase ? 'text-green-600' : 'text-purple-600'
+                  }`}>
+                    {formatDate(earning.created_at)}
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="flex items-center justify-center mb-1">
+                    <span className={`text-xs ${
+                      isCashbackPhase ? 'text-green-300' : 'text-purple-300'
+                    }`}>
+                      {isCashbackPhase ? '📅' : '⏳'}
+                    </span>
+                  </div>
+                  <div className={`text-[8px] ${
+                    isCashbackPhase ? 'text-green-500' : 'text-purple-500'
+                  }`}>
+                    Pendiente
+                  </div>
+                </>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+};
+
 const UsersPage: React.FC = () => {
 
   const [users, setUsers] = useState<User[]>([]);
@@ -47,6 +152,8 @@ const UsersPage: React.FC = () => {
   const [userProfile, setUserProfile] = useState<any>(null);
   const [profileLoading, setProfileLoading] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
+  const [licenseEarnings, setLicenseEarnings] = useState<{[key: string]: any[]}>({});
+  const [earningsLoading, setEarningsLoading] = useState(false);
   
   // Edit form states
   const [editForm, setEditForm] = useState({
@@ -125,6 +232,27 @@ const UsersPage: React.FC = () => {
       
       const response = await apiService.getAdminUserProfile(user.id);
       setUserProfile(response.profile);
+      
+      // Load earnings for each active license
+      if (response.profile.licenses) {
+        setEarningsLoading(true);
+        const earningsData: {[key: string]: any[]} = {};
+        
+        for (const license of response.profile.licenses) {
+          if (license.status === 'active') {
+            try {
+              const earningsResponse = await apiService.getLicenseEarnings(license.id);
+              earningsData[license.id] = earningsResponse.data || [];
+            } catch (error) {
+              console.error(`Error loading earnings for license ${license.id}:`, error);
+              earningsData[license.id] = [];
+            }
+          }
+        }
+        
+        setLicenseEarnings(earningsData);
+        setEarningsLoading(false);
+      }
     } catch (err: any) {
       console.error('Error fetching user profile:', err);
       toast.error('Error al cargar el perfil del usuario');
@@ -802,6 +930,8 @@ const UsersPage: React.FC = () => {
                       onClick={() => {
                         setShowProfileModal(false);
                         setUserProfile(null);
+                        setLicenseEarnings({});
+                        setEarningsLoading(false);
                       }}
                       className="text-slate-400 hover:text-slate-600 transition-colors"
                     >
@@ -887,6 +1017,43 @@ const UsersPage: React.FC = () => {
                           <div className="text-sm text-orange-700">Referidos</div>
                         </div>
                       </div>
+
+                      {/* License Earnings Calendar */}
+                      {userProfile.licenses && userProfile.licenses.filter((license: any) => license.status === 'active').length > 0 && (
+                        <div className="bg-slate-50 rounded-lg p-4">
+                          <h4 className="font-semibold text-slate-800 mb-4">📅 Calendarios de Ganancias</h4>
+                          {earningsLoading ? (
+                            <div className="flex items-center justify-center py-8">
+                              <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
+                              <span className="ml-3 text-slate-600">Cargando calendarios...</span>
+                            </div>
+                          ) : (
+                            <div className="space-y-6">
+                              {userProfile.licenses
+                                .filter((license: any) => license.status === 'active')
+                                .map((license: any) => (
+                                  <div key={license.id} className="bg-white rounded-lg p-4 border border-slate-200">
+                                    <div className="mb-4">
+                                      <h5 className="font-semibold text-slate-800">{license.product?.name || 'Licencia'}</h5>
+                                      <div className="text-sm text-slate-600 mt-1">
+                                        <span>Días generados: {license.days_generated || 0}</span>
+                                        <span className="mx-2">•</span>
+                                        <span>Cashback: ${license.cashback_accum || '0.00'}</span>
+                                        <span className="mx-2">•</span>
+                                        <span>Potencial: ${license.potential_accum || '0.00'}</span>
+                                      </div>
+                                    </div>
+                                    <AdminEarningCalendar 
+                                      earnings={licenseEarnings[license.id] || []} 
+                                      licenseName={license.product?.name || 'Licencia'}
+                                    />
+                                  </div>
+                                ))
+                              }
+                            </div>
+                          )}
+                        </div>
+                      )}
 
                       {/* Recent Activity */}
                       {userProfile.orders && userProfile.orders.length > 0 && (

@@ -11,7 +11,7 @@ dotenv.config();
  * Backfill script to normalize existing licenses to the new profit engine:
  * - Set days_generated based on existing earnings
  * - Initialize flags.pause_potential to false
- * - Ensure compatibility with 10%/day × 20 days (200% cap) model
+ * - Ensure compatibility with 8%/day × 25 days (200% cap) model
  * - Migrate old earnings to new structure
  */
 

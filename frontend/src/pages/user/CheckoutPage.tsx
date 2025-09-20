@@ -97,10 +97,24 @@ const CheckoutPage: React.FC = () => {
     }
   };
 
+  const validateTxHash = (hash: string): boolean => {
+    // Remove whitespace and convert to lowercase
+    const cleanHash = hash.trim().toLowerCase();
+    
+    // Check if it starts with 0x and has exactly 66 characters (0x + 64 hex chars)
+    const hashRegex = /^0x[a-f0-9]{64}$/;
+    return hashRegex.test(cleanHash);
+  };
+
   const handleSubmitTransaction = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!txHash.trim()) {
-      setError('Please enter a transaction hash');
+      setError('Por favor ingresa un hash de transacción');
+      return;
+    }
+
+    if (!validateTxHash(txHash)) {
+      setError('El hash de transacción debe tener el formato correcto (0x seguido de 64 caracteres hexadecimales)');
       return;
     }
 
@@ -110,12 +124,12 @@ const CheckoutPage: React.FC = () => {
 
     try {
       await apiService.submitTransaction(orderId!, txHash.trim());
-      setSuccess('Transaction submitted successfully! Awaiting admin confirmation.');
+      setSuccess('¡Transacción enviada exitosamente! Esperando confirmación del administrador.');
       setTxHash('');
       fetchOrder(); // Refresh order status
     } catch (error: any) {
       console.error('Error submitting transaction:', error);
-      setError(error.response?.data?.error || 'Error submitting transaction');
+      setError(error.response?.data?.error || 'Error al enviar la transacción');
     } finally {
       setSubmitting(false);
     }
@@ -431,14 +445,35 @@ const CheckoutPage: React.FC = () => {
                     type="text"
                     id="txHash"
                     value={txHash}
-                    onChange={(e) => setTxHash(e.target.value)}
+                    onChange={(e) => {
+                      // Only allow hexadecimal characters and 0x prefix
+                      const value = e.target.value;
+                      if (value === '' || /^0x[a-fA-F0-9]*$/.test(value)) {
+                        setTxHash(value);
+                      }
+                    }}
                     placeholder="0x..."
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-xs sm:text-sm transition-all"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-xs sm:text-sm transition-all font-mono"
                     disabled={submitting}
+                    maxLength={66}
                   />
                   <p className="text-xs text-gray-500 mt-1">
-                    Ingresa el hash de transacción de tu wallet después de enviar el pago
+                    Ingresa el hash de transacción de tu wallet después de enviar el pago (debe comenzar con 0x)
                   </p>
+                  
+                  {/* Warning Message */}
+                  <div className="mt-2 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                    <div className="flex items-start">
+                      <AlertCircle className="h-4 w-4 text-amber-600 mr-2 mt-0.5 flex-shrink-0" />
+                      <div>
+                        <p className="text-xs font-semibold text-amber-800 mb-1">⚠️ ADVERTENCIA IMPORTANTE</p>
+                        <p className="text-xs text-amber-700">
+                          Asegúrate de que el hash de transacción sea correcto. Un hash incorrecto puede resultar en la <strong>pérdida permanente de tus fondos</strong>. 
+                          Verifica cuidadosamente la información antes de enviar para que el agente encargado pueda validar todo sin problemas.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
                 </div>
 
                 {error && (

@@ -1,4 +1,4 @@
-# Grow5x - Plataforma de Licencias de Herramientas Tecnológicas
+# ProFitAgent - Plataforma de Agentes de Arbitraje Automatizado
 
 ## ✅ Estado del Proyecto
 
@@ -42,7 +42,7 @@ docker compose up -d
 cd backend
 npm run prisma:deploy
 ```
-> Nota: El seeding con Prisma está en revisión. Las cuentas de prueba ya están disponibles; ver docs/user-credentials.md.
+> Nota: El seeding con Prisma está en revisión. Las cuentas de prueba ya están disponibles.
 
 ### 4. Start Development Server
 ```bash
@@ -56,19 +56,17 @@ npm run worker
 ## 📋 Cuentas por Defecto (Testing)
 
 ### Cuenta Admin
-- **Email**: admin@grow5x.app
+- **Email**: admin@profitagent.app
 - **Password**: Admin123!
 - **Rol**: admin
 
 ### Cuenta de Usuario (referida por Admin)
-- **Email**: user@grow5x.app
+- **Email**: user@profitagent.app
 - **Password**: User123!
 - **Rol**: user
 - **Sponsor**: ref_code del Admin (REF84I1MR)
 
-> Más detalles en docs/user-credentials.md
-
-## 🏗️ Project Structure
+## 🗂️ Project Structure
 
 ```
 backend/
@@ -105,16 +103,25 @@ backend/
 
 **Funcionalidad**: Sistema automático que notifica al usuario cuando vincula exitosamente su cuenta de Telegram.
 
+**Métodos de vinculación soportados**:
+- ✅ **Por ID de Telegram**: Usando el telegram_user_id numérico
+- ✅ **Por @usuario**: Usando el telegram_username (ej: @usuario123)
+
 **Características**:
 - ✅ **Mensaje directo por Telegram**: Confirmación personalizada enviada automáticamente
 - ✅ **Notificación web en tiempo real**: Usando SSE (Server-Sent Events)
 - ✅ **Contenido personalizado**: Incluye nombre del usuario y beneficios activados
 - ✅ **Manejo de errores**: Logs detallados sin afectar el proceso principal
+- ✅ **Flexibilidad de vinculación**: Acepta tanto ID numérico como @usuario
 
 **Beneficios activados tras la vinculación**:
 - 🔐 Códigos OTP para retiros seguros
 - 🚨 Alertas automáticas de transacciones
 - 📱 Notificaciones de sistema en tiempo real
+
+**Campos de base de datos**:
+- `telegram_user_id`: ID numérico único de Telegram
+- `telegram_username`: @usuario de Telegram (opcional, único si se proporciona)
 
 ## 🌐 Frontend Routes
 
@@ -158,15 +165,17 @@ backend/
 - `POST /api/v1/admin/referrals/:id/release` - Release commission (admin)
 - `POST /api/v1/admin/referrals/:id/cancel` - Cancel commission (admin)
 
-## 💰 License Products
+## 💰 Licencias de Agentes ProFitAgent
 
-| Product | Price | Daily Earning | Total Return | Duration |
-|---------|-------|---------------|--------------|----------|
-| Starter | $100 | $10 | $200 | 20 days |
-| Professional | $500 | $50 | $1,000 | 20 days |
-| Enterprise | $1,000 | $100 | $2,000 | 20 days |
+| Licencia | Precio | Ganancia Diaria | Retorno Total | Duración |
+|----------|--------|-----------------|---------------|----------|
+| Básica | $500 | 8% diario | 200% (25 días) | 25 días |
+| Estándar | $1,000 | 8% diario | 200% (25 días) | 25 días |
+| Premium | $2,500 | 8% diario | 200% (25 días) | 25 días |
+| Elite | $5,000 | 8% diario | 200% (25 días) | 25 días |
+| Enterprise | $10,000 | 8% diario | 200% (25 días) | 25 días |
 
-## 🔄 F1 Flow Testing
+## 📄 F1 Flow Testing
 
 1. **Register User**: `POST /api/v1/auth/register`
 2. **Login**: `POST /api/v1/auth/login`
@@ -186,7 +195,6 @@ npm run worker           # Start job processor
 # Database
 npm run prisma:deploy    # Apply migrations + generate client
 npm run prisma:studio    # Database GUI
-# npm run prisma:seed    # Temporalmente deshabilitado (realineación Prisma)
 
 # Production
 npm run build            # Build TypeScript
@@ -210,7 +218,7 @@ npm run start:worker     # Start production worker
 Create `.env` file in `backend/` directory:
 
 ```env
-DATABASE_URL="postgresql://grow5x:password123@localhost:55432/grow5x?schema=public"
+DATABASE_URL="postgresql://profitagent:password123@localhost:55432/profitagent?schema=public"
 NODE_ENV=development
 PORT=5000
 JWT_SECRET=your-super-secret-jwt-key-here
@@ -240,15 +248,15 @@ npm run prisma:deploy
 
 ### Port Conflicts
 - API Server: Change `PORT` in `.env`
-- PostgreSQL: Change port in `docker-compose.yml`
-- Redis: Change port in `docker-compose.yml`
+- PostgreSQL: Change port in Docker configuration
+- Redis: Change port in Docker configuration
 
 ---
 
 ## 📈 Avances Completados
 
 ### ✅ Infraestructura Base
-- [x] Estructura de directorios (backend/, docs/, infrastructure/)
+- [x] Estructura de directorios (backend/, frontend/, smart-contracts/)
 - [x] Docker Compose para PostgreSQL 15 + Redis 7
 - [x] Proyecto Node.js/TypeScript con todas las dependencias
 - [x] Prisma ORM con 15+ modelos de base de datos
@@ -272,8 +280,9 @@ npm run prisma:deploy
 - [x] Mapeo correcto entre código y schema Prisma
 - [x] Manejo de errores y validaciones consistentes
 - [x] Configuración de rutas Express correcta
+- [x] Limpieza de archivos obsoletos del proyecto anterior
 
-### ✅ Sistema de Referidos (25/01/2025)
+### ✅ Sistema de Referidos
 - [x] Comisiones automáticas del 10% al confirmar órdenes
 - [x] Balance de usuario incluye comisiones pendientes
 - [x] Endpoints API completos (/referrals, /admin/referrals)
@@ -282,7 +291,7 @@ npm run prisma:deploy
 - [x] Navegación integrada en sidebars usuario y admin
 - [x] Middleware de autenticación corregido
 
-### ✅ Frontend React (25/01/2025)
+### ✅ Frontend React
 - [x] Páginas de usuario completamente funcionales
 - [x] Panel de administración operativo
 - [x] Componentes UI modernos con Tailwind CSS
@@ -290,6 +299,13 @@ npm run prisma:deploy
 - [x] Rutas y navegación configuradas
 - [x] Sistema de autenticación frontend-backend
 
+### ✅ Smart Contracts
+- [x] Contratos ProFitAgent para BSC
+- [x] Sistema de licencias tokenizadas
+- [x] Gestión de pagos USDT automatizada
+- [x] Scripts de deployment y verificación
+
 **Status**: ✅ F1 Backend Implementation Complete  
 **Servidor**: 🟢 Ejecutándose en http://localhost:5000  
-**Next**: Iniciar Docker Desktop → Conectar DB → Probar flujo F1
+**Frontend**: 🟢 Ejecutándose en http://localhost:3000  
+**Next**: Continuar con desarrollo de funcionalidades avanzadas

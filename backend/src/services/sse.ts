@@ -30,7 +30,7 @@ class SSEService {
   /**
    * Add a new SSE client
    */
-  addClient(clientId: string, response: Response, userId?: string, isAdmin?: boolean): void {
+  addClient(clientId: string, response: Response, userId?: string, isAdmin?: boolean, origin?: string): void {
     const client: SSEClient = {
       id: clientId,
       response,
@@ -47,14 +47,22 @@ class SSEService {
 
     this.clients.set(clientId, client);
     
-    // Set SSE headers
-    response.writeHead(200, {
+    // Set SSE headers with proper CORS for credentials
+    const headers: Record<string, string> = {
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache',
       'Connection': 'keep-alive',
-      'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Headers': 'Cache-Control'
-    });
+      'X-Accel-Buffering': 'no'
+    };
+
+    // Only set CORS headers when an Origin is present (cross-origin requests)
+    if (origin) {
+      headers['Access-Control-Allow-Origin'] = origin;
+      headers['Access-Control-Allow-Credentials'] = 'true';
+      headers['Vary'] = 'Origin';
+    }
+
+    response.writeHead(200, headers);
 
     // Send initial connection event
     this.sendToClient(clientId, {
@@ -248,25 +256,23 @@ class SSEService {
    * Start the SSE service
    */
   start(): void {
+    // noop: initialized on constructor
     logger.info('SSE service started');
   }
 
   /**
-   * Cleanup on shutdown
+   * Shutdown the SSE service
    */
   shutdown(): void {
     clearInterval(this.pingInterval);
-    
-    // Close all client connections
-    for (const [clientId] of this.clients) {
-      this.removeClient(clientId);
-    }
-    
+    this.clients.forEach(({ response }) => {
+      try { response.end(); } catch {}
+    });
+    this.clients.clear();
     logger.info('SSE service shutdown completed');
   }
 }
 
-// Export singleton instance
 export const sseService = new SSEService();
 
 // Graceful shutdown

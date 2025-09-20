@@ -36,10 +36,10 @@ const RealTimeProduction: React.FC<RealTimeProductionProps> = ({ principal, star
       
       setSecondsElapsed(elapsedSeconds);
       
-      // Calculate earnings: 10% daily = 0.1157% per second
-      // Production per second = (principal * 0.1) / 86400
+      // Calculate earnings: 8% daily = 0.0926% per second
+      // Production per second = (principal * 0.08) / 86400
       const validPrincipal = parseFloat(principal.toString()) || 0;
-      const productionPerSecond = (validPrincipal * 0.1) / 86400;
+      const productionPerSecond = (validPrincipal * 0.08) / 86400;
       const totalEarnings = productionPerSecond * elapsedSeconds;
       
       setCurrentEarnings(totalEarnings);
@@ -57,7 +57,7 @@ const RealTimeProduction: React.FC<RealTimeProductionProps> = ({ principal, star
   }
 
   const validPrincipal = parseFloat(principal?.toString() || '0') || 0;
-  const productionPerSecond = (validPrincipal * 0.1) / 86400;
+  const productionPerSecond = (validPrincipal * 0.08) / 86400;
 
   return (
     <div className="bg-gradient-to-r from-green-50 to-emerald-50 rounded-lg p-3 border border-green-200">
@@ -202,7 +202,7 @@ const LicenseCard: React.FC<LicenseCardProps> = ({ license, isSelected, onClick 
         
         <div className="flex justify-between items-center">
           <span className="text-sm text-gray-600 font-medium">Días:</span>
-          <span className="text-base font-bold text-purple-600">{license.days_generated || 0}/20 días</span>
+          <span className="text-base font-bold text-purple-600">{license.days_generated || 0}/25 días</span>
         </div>
         
         <div className="flex justify-between items-center mb-3">
@@ -259,15 +259,15 @@ const LicenseDetails: React.FC<LicenseDetailsProps> = ({ license, earnings, load
   
   // Calculate days generated and phase information
   const daysGenerated = license.daysGenerated || license.days_generated || 0;
-  const cashbackDays = Math.min(daysGenerated, 10);
-  const potentialDays = Math.max(0, daysGenerated - 10);
-  const cashbackAmount = principal * 0.1 * cashbackDays;
+  const cashbackDays = Math.min(daysGenerated, 13);
+  const potentialDays = Math.max(0, daysGenerated - 13);
+  const cashbackAmount = principal * 0.08 * cashbackDays; // 8% daily for 13 days = 104%
   const potentialAmount = accrued - cashbackAmount;
   
   // Calculate end dates
   const startDate = license.started_at ? new Date(license.started_at) : null;
-  const cashbackEndDate = startDate ? new Date(startDate.getTime() + (10 * 24 * 60 * 60 * 1000)) : null;
-  const licenseEndDate = startDate ? new Date(startDate.getTime() + (20 * 24 * 60 * 60 * 1000)) : null;
+  const cashbackEndDate = startDate ? new Date(startDate.getTime() + (13 * 24 * 60 * 60 * 1000)) : null;
+  const licenseEndDate = startDate ? new Date(startDate.getTime() + (25 * 24 * 60 * 60 * 1000)) : null;
 
   return (
     <div className="space-y-6">
@@ -332,7 +332,7 @@ const LicenseDetails: React.FC<LicenseDetailsProps> = ({ license, earnings, load
           </div>
           <div className="flex flex-col gap-2">
             <span className="text-gray-600 font-medium text-xs uppercase tracking-wide">⏱️ Días Generados</span>
-            <span className="font-bold text-purple-600 text-base">{daysGenerated}/20 días</span>
+            <span className="font-bold text-purple-600 text-base">{daysGenerated}/25 días</span>
           </div>
           <div className="flex flex-col gap-2">
             <span className="text-gray-600 font-medium text-xs uppercase tracking-wide">🏁 Fin Cashback</span>
@@ -362,20 +362,20 @@ const LicenseDetails: React.FC<LicenseDetailsProps> = ({ license, earnings, load
                 💰 Fase Cashback
               </h5>
               <span className="text-sm font-semibold text-green-600 bg-green-100 px-2 py-1 rounded-lg">
-                Días 1-10
+                Días 1-13
               </span>
             </div>
             
             <div className="space-y-3">
               <div className="flex justify-between items-center">
                 <span className="text-sm text-green-600">Días Completados:</span>
-                <span className="font-bold text-green-700">{cashbackDays}/10</span>
+                <span className="font-bold text-green-700">{cashbackDays}/13</span>
               </div>
               
               <div className="w-full bg-green-200 rounded-full h-3">
                 <div 
                   className="h-full bg-gradient-to-r from-green-500 to-emerald-600 rounded-full transition-all duration-500"
-                  style={{ width: `${(cashbackDays / 10) * 100}%` }}
+                  style={{ width: `${(cashbackDays / 13) * 100}%` }}
                 ></div>
               </div>
               
@@ -397,20 +397,20 @@ const LicenseDetails: React.FC<LicenseDetailsProps> = ({ license, earnings, load
                 🚀 Fase Potencial
               </h5>
               <span className="text-sm font-semibold text-purple-600 bg-purple-100 px-2 py-1 rounded-lg">
-                Días 11-20
+                Días 14-25
               </span>
             </div>
             
             <div className="space-y-3">
               <div className="flex justify-between items-center">
                 <span className="text-sm text-purple-600">Días Completados:</span>
-                <span className="font-bold text-purple-700">{potentialDays}/10</span>
+                <span className="font-bold text-purple-700">{potentialDays}/12</span>
               </div>
               
               <div className="w-full bg-purple-200 rounded-full h-3">
                 <div 
                   className="h-full bg-gradient-to-r from-purple-500 to-violet-600 rounded-full transition-all duration-500"
-                  style={{ width: `${(potentialDays / 10) * 100}%` }}
+                  style={{ width: `${(potentialDays / 12) * 100}%` }}
                 ></div>
               </div>
               
@@ -420,18 +420,18 @@ const LicenseDetails: React.FC<LicenseDetailsProps> = ({ license, earnings, load
               </div>
               
               <div className="text-xs text-purple-600 bg-purple-100 p-2 rounded-lg">
-                ⏳ Se libera al completar la licencia
+                ⏳ Se libera cada 24 horas
               </div>
             </div>
           </div>
         </div>
       </div>
 
-      {/* 20-Day Earning Calendar */}
+      {/* 25-Day Earning Calendar */}
       <div className="bg-white/90 backdrop-blur-sm rounded-2xl shadow-xl border border-white/20 p-6">
         <div className="text-center mb-6">
           <h4 className="text-xl font-bold bg-gradient-to-r from-slate-700 via-blue-600 to-indigo-700 bg-clip-text text-transparent mb-2">
-            📅 Calendario de Ganancias (20 Días)
+            📅 Calendario de Ganancias (25 Días)
           </h4>
           <p className="text-gray-600">Liberación cada 24 horas - Seguimiento diario</p>
         </div>
@@ -441,7 +441,7 @@ const LicenseDetails: React.FC<LicenseDetailsProps> = ({ license, earnings, load
             <div className="w-12 h-12 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin"></div>
           </div>
         ) : (
-          <EarningCalendar earnings={earnings} />
+          <EarningCalendar earnings={earnings} license={license} />
         )}
       </div>
     </div>
@@ -453,131 +453,104 @@ interface EarningCalendarProps {
   earnings: any[];
 }
 
-const EarningCalendar: React.FC<EarningCalendarProps> = ({ earnings }) => {
+// Earning Calendar Component with License Context
+interface EarningCalendarProps {
+  earnings: any[];
+  license: License;
+}
+
+const EarningCalendar: React.FC<EarningCalendarProps> = ({ earnings, license }) => {
+  // Calculate days that should be processed based on license start date
+  const daysGenerated = license.daysGenerated || license.days_generated || 0;
+  
   return (
-    <div className="space-y-6">
-      {/* Cashback Phase (Days 1-10) */}
-      <div>
-        <div className="flex items-center gap-2 mb-4">
+    <div className="space-y-4">
+
+      
+      {/* Phase Legend */}
+      <div className="flex flex-col sm:flex-row gap-4 mb-6">
+        <div className="flex items-center gap-2">
           <div className="w-4 h-4 bg-gradient-to-r from-green-400 to-emerald-500 rounded-full"></div>
-          <h5 className="text-lg font-bold text-green-700">💰 Fase Cashback (Días 1-10)</h5>
+          <span className="text-sm font-bold text-green-700">💰 Fase Cashback (Días 1-13)</span>
           <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded-full font-semibold">Se aplica al balance</span>
         </div>
-        <div className="grid grid-cols-5 sm:grid-cols-10 gap-2">
-          {Array.from({ length: 10 }, (_, index) => {
-            const dayNumber = index + 1;
-            const earning = earnings.find(e => {
-              const earningDate = new Date(e.created_at);
-              const daysSinceStart = Math.floor((earningDate.getTime() - new Date(earnings[0]?.created_at || Date.now()).getTime()) / (1000 * 60 * 60 * 24)) + 1;
-              return daysSinceStart === dayNumber;
-            });
-            
-            return (
-              <div
-                key={dayNumber}
-                className={`p-2 rounded-lg border text-center transition-all duration-300 hover:scale-105 relative min-h-[80px] ${
-                  earning
-                    ? 'bg-gradient-to-br from-green-50 to-emerald-50 border-green-300 shadow-lg'
-                    : dayNumber <= new Date().getDate()
-                    ? 'bg-gradient-to-br from-green-25 to-emerald-25 border-green-200 shadow-md'
-                    : 'bg-white border-green-100 shadow-sm'
-                }`}
-              >
-                <div className="absolute -top-1 -right-1 text-xs bg-green-500 text-white rounded-full w-4 h-4 flex items-center justify-center font-bold text-[10px]">💰</div>
-                <div className="text-[10px] font-bold text-green-600 mb-1">Día {dayNumber}</div>
-                {earning ? (
-                  <>
-                    <div className="flex items-center justify-center mb-1">
-                      <span className="text-green-500 text-sm">✅</span>
-                    </div>
-                    <div className="text-[10px] font-bold text-green-700 mb-1 truncate">
-                      ${formatUSDTDisplay(earning.amount_usdt)}
-                    </div>
-                    <div className="text-[8px] text-green-600 truncate">
-                      {formatDate(earning.created_at)}
-                    </div>
-                  </>
-                ) : dayNumber <= new Date().getDate() ? (
-                  <>
-                    <div className="flex items-center justify-center mb-1">
-                      <span className="text-green-400 text-sm">⏳</span>
-                    </div>
-                    <div className="text-[9px] text-green-600 font-medium">Procesando</div>
-                  </>
-                ) : (
-                  <>
-                    <div className="flex items-center justify-center mb-1">
-                      <span className="text-green-300 text-sm">📅</span>
-                    </div>
-                    <div className="text-[9px] text-green-500 font-medium">Pendiente</div>
-                  </>
-                )}
-              </div>
-            );
-          })}
+        <div className="flex items-center gap-2">
+          <div className="w-4 h-4 bg-gradient-to-r from-purple-400 to-violet-500 rounded-full"></div>
+          <span className="text-sm font-bold text-purple-700">🚀 Fase Potencial (Días 14-25)</span>
+          <span className="text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded-full font-semibold">Se libera cada 24h</span>
         </div>
       </div>
 
-      {/* Potential Phase (Days 11-20) */}
-      <div>
-        <div className="flex items-center gap-2 mb-4">
-          <div className="w-4 h-4 bg-gradient-to-r from-purple-400 to-violet-500 rounded-full"></div>
-          <h5 className="text-lg font-bold text-purple-700">🚀 Fase Potencial (Días 11-20)</h5>
-          <span className="text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded-full font-semibold">Se libera al completar</span>
-        </div>
-        <div className="grid grid-cols-5 sm:grid-cols-10 gap-2">
-          {Array.from({ length: 10 }, (_, index) => {
-            const dayNumber = index + 11;
-            const earning = earnings.find(e => {
-              const earningDate = new Date(e.created_at);
-              const daysSinceStart = Math.floor((earningDate.getTime() - new Date(earnings[0]?.created_at || Date.now()).getTime()) / (1000 * 60 * 60 * 24)) + 1;
-              return daysSinceStart === dayNumber;
-            });
-            
-            return (
-              <div
-                key={dayNumber}
-                className={`p-2 rounded-lg border text-center transition-all duration-300 hover:scale-105 relative min-h-[80px] ${
-                  earning
-                    ? 'bg-gradient-to-br from-purple-50 to-violet-50 border-purple-300 shadow-lg'
-                    : dayNumber <= new Date().getDate()
-                    ? 'bg-gradient-to-br from-purple-25 to-violet-25 border-purple-200 shadow-md'
-                    : 'bg-white border-purple-100 shadow-sm'
-                }`}
-              >
-                <div className="absolute -top-1 -right-1 text-xs bg-purple-500 text-white rounded-full w-4 h-4 flex items-center justify-center font-bold text-[10px]">🚀</div>
-                <div className="text-[10px] font-bold text-purple-600 mb-1">Día {dayNumber}</div>
-                {earning ? (
-                  <>
-                    <div className="flex items-center justify-center mb-1">
-                      <span className="text-purple-500 text-sm">✅</span>
-                    </div>
-                    <div className="text-[10px] font-bold text-purple-700 mb-1 truncate">
-                      ${formatUSDTDisplay(earning.amount_usdt)}
-                    </div>
-                    <div className="text-[8px] text-purple-600 truncate">
-                      {formatDate(earning.created_at)}
-                    </div>
-                  </>
-                ) : dayNumber <= new Date().getDate() ? (
-                  <>
-                    <div className="flex items-center justify-center mb-1">
-                      <span className="text-purple-400 text-sm">⏳</span>
-                    </div>
-                    <div className="text-[9px] text-purple-600 font-medium">Procesando</div>
-                  </>
-                ) : (
-                  <>
-                    <div className="flex items-center justify-center mb-1">
-                      <span className="text-purple-300 text-sm">📅</span>
-                    </div>
-                    <div className="text-[9px] text-purple-500 font-medium">Pendiente</div>
-                  </>
-                )}
+      {/* 25-Day Calendar Grid */}
+      <div className="grid grid-cols-5 sm:grid-cols-10 lg:grid-cols-12 xl:grid-cols-13 gap-2">
+        {Array.from({ length: 25 }, (_, index) => {
+          const dayNumber = index + 1;
+          const earning = earnings.find(e => e.day_index === dayNumber);
+          const shouldBeProcessed = dayNumber <= daysGenerated;
+          const isCashbackPhase = dayNumber <= 13;
+          
+          return (
+            <div
+              key={dayNumber}
+              className={`p-2 rounded-lg border text-center transition-all duration-300 hover:scale-105 relative min-h-[80px] ${
+                earning
+                  ? isCashbackPhase
+                    ? 'bg-gradient-to-br from-green-50 to-emerald-50 border-green-300 shadow-lg'
+                    : 'bg-gradient-to-br from-purple-50 to-violet-50 border-purple-300 shadow-lg'
+                  : shouldBeProcessed
+                  ? 'bg-gradient-to-br from-yellow-25 to-orange-25 border-yellow-200 shadow-md'
+                  : isCashbackPhase
+                  ? 'bg-white border-green-100 shadow-sm'
+                  : 'bg-white border-purple-100 shadow-sm'
+              }`}
+            >
+              <div className={`absolute -top-1 -right-1 text-xs text-white rounded-full w-4 h-4 flex items-center justify-center font-bold text-[10px] ${
+                isCashbackPhase ? 'bg-green-500' : 'bg-purple-500'
+              }`}>
+                {isCashbackPhase ? '💰' : '🚀'}
               </div>
-            );
-          })}
-        </div>
+              <div className={`text-[10px] font-bold mb-1 ${
+                isCashbackPhase ? 'text-green-600' : 'text-purple-600'
+              }`}>
+                Día {dayNumber}
+              </div>
+              {earning ? (
+                <>
+                  <div className="flex items-center justify-center mb-1">
+                    <span className={`text-sm ${
+                      isCashbackPhase ? 'text-green-500' : 'text-purple-500'
+                    }`}>✅</span>
+                  </div>
+                  <div className={`text-[10px] font-bold mb-1 truncate ${
+                    isCashbackPhase ? 'text-green-700' : 'text-purple-700'
+                  }`}>
+                    ${formatUSDTDisplay(earning.amount_usdt)}
+                  </div>
+                  <div className={`text-[8px] truncate ${
+                    isCashbackPhase ? 'text-green-600' : 'text-purple-600'
+                  }`}>
+                    {formatDate(earning.created_at)}
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="flex items-center justify-center mb-1">
+                    <span className={`text-sm ${
+                      isCashbackPhase ? 'text-green-300' : 'text-purple-300'
+                    }`}>
+                      {isCashbackPhase ? '📅' : '⏳'}
+                    </span>
+                  </div>
+                  <div className={`text-[9px] font-medium ${
+                    isCashbackPhase ? 'text-green-500' : 'text-purple-500'
+                  }`}>
+                    Pendiente
+                  </div>
+                </>
+              )}
+            </div>
+          );
+        })}
       </div>
     </div>
   );
@@ -593,7 +566,7 @@ const LicensesPage: React.FC = () => {
 
   // Auto-select license if ID is provided in URL
   useEffect(() => {
-    if (id && licenses.length > 0) {
+    if (id && licenses && licenses.length > 0) {
       const license = licenses.find(l => l.id === id);
       if (license) {
         setSelectedLicense(license);
@@ -602,7 +575,7 @@ const LicensesPage: React.FC = () => {
   }, [id, licenses]);
 
   // Calculate KPIs
-  const activeLicenses = licenses.filter(l => l.status === 'active');
+  const activeLicenses = (licenses || []).filter(l => l.status === 'active');
   const totalInvested = activeLicenses.reduce((sum, license) => {
     // Use principalUSDT first, then fallback to product.price_usdt
     const principal = license.principalUSDT || license.product?.price_usdt || '0';
@@ -785,7 +758,7 @@ const LicensesPage: React.FC = () => {
                       <Calendar className="h-10 w-10 text-blue-600" />
                     </div>
                     <h3 className="text-xl font-semibold text-gray-700 mb-2">Selecciona una licencia</h3>
-                    <p className="text-gray-500">Haz clic en cualquier tarjeta de licencia para ver el calendario de ganancias de 20 días</p>
+                    <p className="text-gray-500">Haz clic en cualquier tarjeta de licencia para ver el calendario de ganancias de 25 días</p>
                   </div>
                 )}
               </div>

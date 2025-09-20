@@ -12,7 +12,7 @@ interface Withdrawal {
   id: string;
   amount_usdt: string;
   payout_address: string;
-  status: 'requested' | 'otp_sent' | 'otp_verified' | 'approved' | 'paid' | 'rejected' | 'canceled';
+  status: 'requested' | 'approved' | 'paid' | 'rejected' | 'canceled';
   created_at: string;
   paid_at?: string;
   paid_tx_hash?: string;
@@ -172,8 +172,6 @@ const AdminWithdrawalsPage: React.FC = () => {
   const getStatusBadge = (status: string) => {
     const statusConfig = {
       requested: { color: 'yellow' as const, icon: Clock, text: 'Solicitado' },
-      otp_sent: { color: 'blue' as const, icon: Clock, text: 'OTP Enviado' },
-      otp_verified: { color: 'blue' as const, icon: CheckCircle, text: 'OTP Verificado' },
       approved: { color: 'green' as const, icon: CheckCircle, text: 'Aprobado' },
       paid: { color: 'green' as const, icon: CheckCircle, text: 'Pagado' },
       rejected: { color: 'red' as const, icon: XCircle, text: 'Rechazado' },
@@ -194,7 +192,7 @@ const AdminWithdrawalsPage: React.FC = () => {
   const getActionButtons = (withdrawal: Withdrawal) => {
     const { status, id } = withdrawal;
     
-    if (status === 'requested' || status === 'otp_verified') {
+    if (status === 'requested') {
       return (
         <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
           <Button
@@ -244,8 +242,6 @@ const AdminWithdrawalsPage: React.FC = () => {
   const statusOptions = [
     { value: 'all', label: 'Todos' },
     { value: 'requested', label: 'Solicitados' },
-    { value: 'otp_sent', label: 'OTP Enviado' },
-    { value: 'otp_verified', label: 'OTP Verificado' },
     { value: 'approved', label: 'Aprobados' },
     { value: 'paid', label: 'Pagados' },
     { value: 'rejected', label: 'Rechazados' },

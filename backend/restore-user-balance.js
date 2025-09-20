@@ -1,17 +1,17 @@
-const { PrismaClient } = require('@prisma/client');
+﻿const { PrismaClient } = require('@prisma/client');
 
 const prisma = new PrismaClient();
 
 async function restoreUserBalance() {
   try {
-    console.log('🔄 RESTAURANDO SALDO DEL USUARIO');
+    console.log('ðŸ”„ RESTAURANDO SALDO DEL USUARIO');
     console.log('================================');
     
     const userId = 'cmeqyen000002um207uhb78in';
-    const userEmail = 'user@grow5x.app';
+    const userEmail = 'user@profitagent.app';
     
     // 1. Mostrar estado actual
-    console.log('\n📊 Estado actual del usuario:');
+    console.log('\nðŸ“Š Estado actual del usuario:');
     const currentUser = await prisma.user.findUnique({
       where: { id: userId },
       select: {
@@ -37,7 +37,7 @@ async function restoreUserBalance() {
     console.log('- Total retiros:', currentUser._count.withdrawals);
     
     // 2. Mostrar retiros existentes
-    console.log('\n📋 Retiros existentes:');
+    console.log('\nðŸ“‹ Retiros existentes:');
     const withdrawals = await prisma.withdrawal.findMany({
       where: { user_id: userId },
       orderBy: { created_at: 'desc' },
@@ -57,26 +57,26 @@ async function restoreUserBalance() {
       }
     });
     
-    console.log('\n💰 Total pendiente:', totalPendingAmount, 'USDT');
+    console.log('\nðŸ’° Total pendiente:', totalPendingAmount, 'USDT');
     
     // 3. Eliminar todos los retiros de prueba
-    console.log('\n🗑️  Eliminando retiros de prueba...');
+    console.log('\nðŸ—‘ï¸  Eliminando retiros de prueba...');
     const deleteResult = await prisma.withdrawal.deleteMany({
       where: { user_id: userId }
     });
     
-    console.log('✅ Retiros eliminados:', deleteResult.count);
+    console.log('âœ… Retiros eliminados:', deleteResult.count);
     
     // 4. Eliminar todas las entradas del ledger
-    console.log('\n🗑️  Eliminando entradas del ledger...');
+    console.log('\nðŸ—‘ï¸  Eliminando entradas del ledger...');
     const deleteLedgerResult = await prisma.ledgerEntry.deleteMany({
       where: { user_id: userId }
     });
     
-    console.log('✅ Entradas del ledger eliminadas:', deleteLedgerResult.count);
+    console.log('âœ… Entradas del ledger eliminadas:', deleteLedgerResult.count);
     
     // 5. Crear nueva entrada para 25 USDT
-    console.log('\n💳 Creando balance de 25 USDT...');
+    console.log('\nðŸ’³ Creando balance de 25 USDT...');
     await prisma.ledgerEntry.create({
       data: {
         user_id: userId,
@@ -84,15 +84,15 @@ async function restoreUserBalance() {
         direction: 'credit',
         ref_type: 'admin_adjustment',
         meta: {
-          description: 'Restauración de balance para testing'
+          description: 'RestauraciÃ³n de balance para testing'
         }
       }
     });
     
-    console.log('✅ Balance restaurado a 25 USDT');
+    console.log('âœ… Balance restaurado a 25 USDT');
     
     // 6. Verificar estado final
-    console.log('\n🎯 Estado final:');
+    console.log('\nðŸŽ¯ Estado final:');
     const finalUser = await prisma.user.findUnique({
       where: { id: userId },
       select: {
@@ -117,13 +117,13 @@ async function restoreUserBalance() {
     console.log('- Saldo final:', finalAmount, 'USDT');
     console.log('- Total retiros:', finalUser._count.withdrawals);
     
-    console.log('\n✅ RESTAURACIÓN COMPLETADA');
+    console.log('\nâœ… RESTAURACIÃ“N COMPLETADA');
     console.log('- Saldo disponible: 25.00 USDT');
     console.log('- Retiros pendientes: 0.00 USDT');
     console.log('- Historial de retiros: limpio');
     
   } catch (error) {
-    console.error('❌ Error durante la restauración:', error.message);
+    console.error('âŒ Error durante la restauraciÃ³n:', error.message);
   } finally {
     await prisma.$disconnect();
   }

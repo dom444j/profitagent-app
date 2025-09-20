@@ -79,8 +79,8 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children, title }) => {
                   </div>
                   <div className="hidden sm:block ml-2 lg:ml-3">
                     <div className="text-sm font-medium text-slate-800 truncate max-w-32 lg:max-w-none">
-                      {user?.first_name && user?.last_name 
-                        ? `${user.first_name} ${user.last_name}`
+                      {user?.first_name && user?.last_name
+              ? `${user.first_name} ${user.last_name}`
                         : user?.email
                       }
                     </div>

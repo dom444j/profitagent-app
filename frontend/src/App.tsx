@@ -25,7 +25,12 @@ import AdminReferralsPage from './pages/admin/AdminReferralsPage';
 import AdminWithdrawalsPage from './pages/admin/AdminWithdrawalsPage';
 import AdminSettingsPage from './pages/admin/AdminSettingsPage';
 import AdminBonusesPage from './pages/admin/AdminBonusesPage';
+import AdminTelegramPage from './pages/admin/AdminTelegramPage';
+import TermsPage from './pages/TermsPage';
+import PrivacyPage from './pages/PrivacyPage';
+import ContactPage from './pages/user/ContactPage';
 import ProtectedRoute from './components/auth/ProtectedRoute';
+
 
 
 
@@ -41,6 +46,10 @@ const AppContent: React.FC = () => {
       <Route path="/register" element={<RegisterPage />} />
       <Route path="/admin/login" element={<AdminLoginPage />} />
       <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+      
+      {/* Legal Pages */}
+      <Route path="/terms" element={<TermsPage />} />
+      <Route path="/privacy" element={<PrivacyPage />} />
       
       {/* User Routes */}
       <Route
@@ -120,6 +129,14 @@ const AppContent: React.FC = () => {
         element={
           <ProtectedRoute>
             <UserWithdrawalsPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/user/contact"
+        element={
+          <ProtectedRoute>
+            <ContactPage />
           </ProtectedRoute>
         }
       />
@@ -210,6 +227,14 @@ const AppContent: React.FC = () => {
         element={
           <ProtectedRoute adminOnly={true}>
             <AdminSettingsPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/admin/telegram"
+        element={
+          <ProtectedRoute adminOnly={true}>
+            <AdminTelegramPage />
           </ProtectedRoute>
         }
       />

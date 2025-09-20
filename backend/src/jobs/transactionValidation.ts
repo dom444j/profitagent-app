@@ -3,6 +3,7 @@ import { prisma } from '../lib/prisma';
 import { blockchainService } from '../services/blockchain';
 import { telegramService } from '../services/telegram';
 import { realTimeNotificationService } from '../services/real-time-notifications';
+import { adminSettingsService } from '../modules/admin/settings.service';
 import { logger } from '../utils/logger';
 
 interface ValidationJobData {
@@ -76,23 +77,67 @@ export async function processTransactionValidation(job: Job<ValidationJobData>) 
     );
 
     if (validationResult.isValid) {
-      // Transaction is valid, auto-confirm the order
-      await autoConfirmOrder(order);
+      // Check if automatic order processing is enabled
+      const settings = await adminSettingsService.getSettings();
       
-      logger.info(`Order ${orderId} auto-confirmed after blockchain validation`);
-      
-      // Send success notification
-      await telegramService.sendOrderAlert('auto_confirmed', {
-        id: order.id,
-        user_email: order.user.email,
-        amount: parseFloat(order.amount_usdt.toString()),
-        tx_hash: order.tx_hash,
-        product_name: order.product.name,
-        validation_result: validationResult
-      });
-      
-      // Send real-time notification to user
-      await realTimeNotificationService.sendOrderNotification('completed', order);
+      if (settings.system.automatic_order_processing) {
+        // Transaction is valid and auto-processing is enabled, auto-confirm the order
+        await autoConfirmOrder(order);
+        
+        logger.info(`Order ${orderId} auto-confirmed after blockchain validation`);
+        
+        // Send success notification
+        await telegramService.sendOrderAlert('auto_confirmed', {
+          id: order.id,
+          user_email: order.user.email,
+          amount: parseFloat(order.amount_usdt.toString()),
+          tx_hash: order.tx_hash,
+          product_name: order.product.name,
+          validation_result: {
+            isValid: validationResult.isValid,
+            error: validationResult.error,
+            amountUSDT: validationResult.amountUSDT
+          }
+        });
+        
+        // Send real-time notification to user
+        await realTimeNotificationService.sendOrderNotification('completed', order);
+      } else {
+        // Auto-processing is disabled, mark for manual review
+        logger.info(`Order ${orderId} validated but requires manual confirmation (auto-processing disabled)`);
+        
+        // Update order to mark it as validated but pending manual confirmation
+        await prisma.orderDeposit.update({
+          where: { id: orderId },
+          data: {
+            raw_chain_payload: {
+              blockchain_validated: true,
+              validated_at: new Date().toISOString(),
+              validation_result: {
+                isValid: validationResult.isValid,
+                error: validationResult.error,
+                amountUSDT: validationResult.amountUSDT
+              },
+              requires_manual_confirmation: true,
+              auto_processing_disabled: true
+            }
+          }
+        });
+        
+        // Send alert to admin for manual confirmation
+        await telegramService.sendOrderAlert('manual_confirmation_required', {
+          id: order.id,
+          user_email: order.user.email,
+          amount: parseFloat(order.amount_usdt.toString()),
+          tx_hash: order.tx_hash,
+          product_name: order.product.name,
+          validation_result: {
+            isValid: validationResult.isValid,
+            error: validationResult.error,
+            amountUSDT: validationResult.amountUSDT
+          }
+        });
+      }
       
     } else {
       // Transaction validation failed
@@ -158,7 +203,7 @@ async function autoConfirmOrder(order: any) {
       }
     });
 
-    // Create user license
+    // Create user license in pending status (requires manual activation)
     const license = await tx.userLicense.create({
       data: {
         user_id: order.user_id,

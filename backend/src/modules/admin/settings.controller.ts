@@ -10,7 +10,6 @@ import { logger } from '../../utils/logger';
 // Validation schemas
 const systemSettingsSchema = z.object({
   min_withdrawal_amount: z.number().positive().optional(),
-  withdrawal_fee_usdt: z.number().min(0).optional(),
   daily_earning_rate: z.number().min(0).max(1).optional(),
   max_earning_days: z.number().int().positive().optional(),
   earning_cap_percentage: z.number().positive().optional(),

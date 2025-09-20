@@ -10,8 +10,11 @@ try {
   dotenv.config({ path: envPath });
 } catch {}
 
-// Build connection string from env or fallback to local docker-compose defaults
-const connectionString = process.env.DATABASE_URL || 'postgresql://grow5x:password123@localhost:55432/grow5x?schema=public';
+// Get connection string from environment
+const connectionString = process.env.DATABASE_URL;
+if (!connectionString) {
+  throw new Error('DATABASE_URL environment variable is required');
+}
 
 // Direct PostgreSQL connection
 const pool = new Pool({
@@ -101,6 +104,24 @@ export class DirectAuthService {
       // Remove password_hash from response
       const { password_hash, ...userWithoutPassword } = user;
       return userWithoutPassword;
+    } finally {
+      client.release();
+    }
+  }
+
+  static async getUserById(userId: string) {
+    const client = await pool.connect();
+    try {
+      const result = await client.query(
+        'SELECT id, email, first_name, last_name, ref_code, usdt_bep20_address, telegram_link_status, status, role FROM users WHERE id = $1',
+        [userId]
+      );
+
+      if (result.rows.length === 0) {
+        return null;
+      }
+
+      return result.rows[0];
     } finally {
       client.release();
     }

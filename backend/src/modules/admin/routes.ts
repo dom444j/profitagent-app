@@ -94,6 +94,21 @@ router.get('/audit-logs', auditLogsController.getAuditLogs);
 // GET /api/v1/admin/audit-logs/stats - Get audit logs statistics
 router.get('/audit-logs/stats', auditLogsController.getAuditLogStats);
 
+// POST /api/v1/admin/daily-earnings/trigger - Manually trigger daily earnings processing
+router.post('/daily-earnings/trigger', adminController.triggerDailyEarnings);
+
+// POST /api/v1/admin/licenses/:licenseId/activate - Activate a pending license
+router.post('/licenses/:licenseId/activate', adminController.activateLicense);
+
+// POST /api/v1/admin/licenses/:licenseId/adjust-days - Manually adjust license active days
+router.post('/licenses/:licenseId/adjust-days', adminController.adjustLicenseDays);
+
+// POST /api/v1/admin/licenses/:licenseId/adjust-timing - Manually adjust license timing (countdown)
+router.post('/licenses/:licenseId/adjust-timing', adminController.adjustLicenseTiming);
+
+// POST /api/v1/admin/licenses/:licenseId/process-earnings - Process license earnings manually
+router.post('/licenses/:licenseId/process-earnings', adminController.processLicenseEarnings);
+
 // Admin settings routes
 router.use('/settings', adminSettingsRoutes);
 

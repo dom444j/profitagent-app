@@ -20,11 +20,12 @@ Object.keys(process.env).filter(key => key.startsWith('DATABASE')).forEach(key =
   logger.info(`${key}: ${process.env[key]}`);
 });
 
-// Fallback for DATABASE_URL if not loaded
+// Validate DATABASE_URL is loaded
 if (!process.env.DATABASE_URL) {
-  process.env.DATABASE_URL = 'postgresql://grow5x:password123@localhost:55432/grow5x?schema=public';
+  logger.error('DATABASE_URL environment variable is required');
+  process.exit(1);
 }
-logger.info('Final DATABASE_URL: ' + process.env.DATABASE_URL);
+logger.info('DATABASE_URL configured from environment');
 
 const redis = new Redis(process.env.REDIS_URL!, {
   maxRetriesPerRequest: null

@@ -12,16 +12,15 @@ export class SystemController {
       // Get public system settings
       const settings = await prisma.setting.findMany({
         where: {
-          key: {
-            in: ['min_withdrawal_amount', 'withdrawal_fee_usdt', 'maintenance_mode']
-          }
+        key: {
+          in: ['min_withdrawal_amount', 'maintenance_mode']
         }
+      }
       });
       
       const config = {
         min_withdrawal_amount: parseFloat(settings.find(s => s.key === 'min_withdrawal_amount')?.value?.toString() || '10'),
-        withdrawal_fee_usdt: parseFloat(settings.find(s => s.key === 'withdrawal_fee_usdt')?.value?.toString() || '2'),
-        maintenance_mode: settings.find(s => s.key === 'maintenance_mode')?.value === 'true'
+      maintenance_mode: settings.find(s => s.key === 'maintenance_mode')?.value === 'true'
       };
       
       res.json({

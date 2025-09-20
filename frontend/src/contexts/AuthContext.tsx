@@ -39,6 +39,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     try {
       const { user } = await apiService.login(email, password);
       setUser(user);
+    } catch (error) {
+      setLoading(false);
+      throw error;
     } finally {
       setLoading(false);
     }
@@ -49,6 +52,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     try {
       const { user } = await apiService.adminLogin(email, password);
       setUser(user);
+    } catch (error) {
+      setLoading(false);
+      throw error;
     } finally {
       setLoading(false);
     }
@@ -65,6 +71,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     try {
       const { user } = await apiService.register(email, password, sponsor_code, first_name, last_name);
       setUser(user);
+    } catch (error) {
+      setLoading(false);
+      throw error;
     } finally {
       setLoading(false);
     }

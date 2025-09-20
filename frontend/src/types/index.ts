@@ -5,6 +5,10 @@ export interface User {
   last_name: string;
   ref_code: string;
   usdt_bep20_address?: string;
+  withdrawal_wallet_address?: string;
+  withdrawal_wallet_verified?: boolean;
+  telegram_user_id?: string;
+  telegram_username?: string;
   telegram_link_status: 'not_linked' | 'pending' | 'linked';
   status: 'active' | 'inactive' | 'suspended';
   role: 'user' | 'admin';

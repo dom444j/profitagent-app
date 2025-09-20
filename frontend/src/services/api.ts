@@ -6,7 +6,7 @@ class ApiService {
 
   constructor() {
     this.api = axios.create({
-      baseURL: '/api/v1',
+      baseURL: import.meta.env.VITE_API_URL || '/api/v1',
       withCredentials: true,
       headers: {
         'Content-Type': 'application/json',
@@ -98,7 +98,7 @@ class ApiService {
   }
 
   // Licenses
-  async getLicenses(status?: string): Promise<ApiResponse<License[]>> {
+  async getLicenses(status?: string): Promise<{ data: { licenses: License[] } } | { data: License[] } | { licenses: License[] }> {
     const params = status ? { status } : {};
     const response = await this.api.get('/licenses', { params });
     return response.data;
@@ -127,10 +127,7 @@ class ApiService {
     return response.data;
   }
 
-  async confirmWithdrawalOtp(withdrawalId: string, otpCode: string, otpId: string): Promise<any> {
-    const response = await this.api.post(`/withdrawals/${withdrawalId}/confirm-otp`, { otp_code: otpCode, otp_id: otpId });
-    return response.data;
-  }
+
 
   async cancelWithdrawal(withdrawalId: string): Promise<any> {
     const response = await this.api.delete(`/withdrawals/${withdrawalId}`);
@@ -185,13 +182,34 @@ class ApiService {
     return response.data;
   }
 
-  // SSE Connection: usar cookie httpOnly vía withCredentials
-  createSSEConnection(): EventSource {
-    const url = new URL('/api/v1/sse/events', window.location.origin);
-    const eventSource = new EventSource(url.toString(), {
-      withCredentials: true,
-    } as any);
-    return eventSource;
+  // SSE Token endpoint for VPS mode
+  async getSseToken(): Promise<{ token: string; exp: number }> {
+    const response = await this.api.post('/auth/sse-token');
+    return response.data;
+  }
+
+  // SSE Connection with mixed authentication (token for VPS, cookie for local)
+  async createSSEConnection(): Promise<EventSource> {
+    const apiBaseUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000/api/v1';
+    const baseUrl = new URL('/api/v1/sse/events', apiBaseUrl.startsWith('http') ? apiBaseUrl.replace('/api/v1', '') : 'http://localhost:5000');
+    
+    try {
+      // Try to get SSE token (will work in VPS mode, fail in local mode)
+      const { token } = await this.getSseToken();
+      
+      // If we got a token, use it in query string (VPS mode)
+      const url = new URL(baseUrl.toString());
+      url.searchParams.set('token', token);
+      
+      console.log('SSE: Using token authentication for VPS mode');
+      return new EventSource(url.toString());
+    } catch (error) {
+      // Fallback to cookie authentication (local mode)
+      console.log('SSE: Using cookie authentication for local mode');
+      return new EventSource(baseUrl.toString(), {
+        withCredentials: true,
+      } as any);
+    }
   }
 
   // Admin endpoints
@@ -233,6 +251,11 @@ class ApiService {
 
   async changeAdminPassword(passwordData: { current_password: string; new_password: string; confirm_password: string }): Promise<any> {
     const response = await this.api.post('/admin/settings/change-password', passwordData);
+    return response.data;
+  }
+
+  async changeUserPassword(passwordData: { current_password: string; new_password: string; confirm_password: string }): Promise<any> {
+    const response = await this.api.post('/user/settings/change-password', passwordData);
     return response.data;
   }
 
@@ -415,6 +438,27 @@ class ApiService {
     return response.data;
   }
 
+  // Manual license management
+  async adjustLicenseDays(licenseId: string, days: number, reason: string): Promise<any> {
+    return this.post(`/admin/licenses/${licenseId}/adjust-days`, {
+      days,
+      reason
+    });
+  }
+
+  async adjustLicenseTiming(licenseId: string, totalMinutes: number, reason: string): Promise<any> {
+    return this.post(`/admin/licenses/${licenseId}/adjust-timing`, {
+      totalMinutes,
+      reason
+    });
+  }
+
+  async processLicenseEarnings(licenseId: string, force: boolean = false): Promise<any> {
+    return this.post(`/admin/licenses/${licenseId}/process-earnings`, {
+      force
+    });
+  }
+
   // Referral methods
   async getUserReferrals(page = 1, limit = 20): Promise<any> {
     return this.get(`/referrals?page=${page}&limit=${limit}`);
@@ -457,10 +501,17 @@ class ApiService {
   }
 
   async markWithdrawalAsPaid(withdrawalId: string, txHash: string, notes?: string, skipValidation?: boolean): Promise<any> {
+    // Generate unique idempotency key for this request
+    const idempotencyKey = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    
     const response = await this.api.post(`/admin/withdrawals/${withdrawalId}/mark-paid`, {
       txHash,
       notes,
       skipValidation
+    }, {
+      headers: {
+        'Idempotency-Key': idempotencyKey
+      }
     });
     return response.data;
   }
@@ -487,18 +538,71 @@ class ApiService {
     first_name?: string;
     last_name?: string;
     phone?: string;
+    withdrawal_wallet_address?: string;
   }): Promise<any> {
     const response = await this.api.put('/user/profile', data);
     return response.data;
   }
 
-  async linkTelegram(telegramUserId: string): Promise<any> {
-    const response = await this.api.post('/user/telegram/link', { telegram_user_id: telegramUserId });
+  async linkTelegram(telegramUserId?: string, telegramUsername?: string): Promise<any> {
+    const payload: any = {};
+    if (telegramUserId) payload.telegram_user_id = telegramUserId;
+    if (telegramUsername) payload.telegram_username = telegramUsername;
+    
+    const response = await this.api.post('/user/telegram/link', payload);
     return response.data;
   }
 
   async unlinkTelegram(): Promise<any> {
     const response = await this.api.post('/user/telegram/unlink');
+    return response.data;
+  }
+
+  // Withdrawal wallet verification
+  async verifyWithdrawalWallet(withdrawalWalletAddress: string): Promise<any> {
+    return this.post('/user/withdrawal-wallet/verify', { withdrawal_wallet_address: withdrawalWalletAddress });
+  }
+
+  async sendWithdrawalWalletOtp(withdrawalWalletAddress: string): Promise<any> {
+    return this.post('/user/withdrawal-wallet/verify', { withdrawal_wallet_address: withdrawalWalletAddress });
+  }
+
+  async verifyWithdrawalWalletOtp(data: { withdrawal_wallet_address: string; otp_code: string }): Promise<any> {
+    return this.post('/user/withdrawal-wallet/confirm', data);
+  }
+
+  async confirmWithdrawalWalletOtp(withdrawalWalletAddress: string, otpCode: string): Promise<any> {
+    return this.post('/user/verify-withdrawal-wallet-otp', { 
+      withdrawal_wallet_address: withdrawalWalletAddress, 
+      otp_code: otpCode 
+    });
+  }
+
+  // AI Configuration endpoints
+  async getAISettings(): Promise<any> {
+    const response = await this.api.get('/telegram-admin/ai/settings');
+    return response.data;
+  }
+
+  async updateAISettings(settings: {
+    enabled: boolean;
+    autoResponse: boolean;
+    responseDelay: number;
+    maxTokens: number;
+    temperature: number;
+    systemPrompt: string;
+  }): Promise<any> {
+    const response = await this.api.put('/telegram-admin/ai/settings', settings);
+    return response.data;
+  }
+
+  async getAIStats(): Promise<any> {
+    const response = await this.api.get('/telegram-admin/ai/stats');
+    return response.data;
+  }
+
+  async testAIResponse(message: string): Promise<any> {
+    const response = await this.api.post('/telegram-admin/ai/test', { message });
     return response.data;
   }
 

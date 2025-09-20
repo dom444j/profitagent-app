@@ -3,8 +3,12 @@ import { DirectAuthService } from './direct-service';
 import * as jwt from 'jsonwebtoken';
 import { logger } from '../../utils/logger';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'dev_secret';
-const JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET || 'dev_refresh';
+const JWT_SECRET = process.env.JWT_SECRET;
+const JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET;
+
+if (!JWT_SECRET || !JWT_REFRESH_SECRET) {
+  throw new Error('JWT_SECRET and JWT_REFRESH_SECRET environment variables are required');
+}
 
 export const directRegister = async (req: Request, res: Response) => {
   try {
@@ -32,8 +36,8 @@ export const directRegister = async (req: Request, res: Response) => {
     const user = await DirectAuthService.register({
       email,
       password,
-      first_name,
-      last_name,
+      first_name: first_name,
+      last_name: last_name,
       sponsor_code
     });
 
@@ -74,7 +78,7 @@ export const directRegister = async (req: Request, res: Response) => {
         id: user.id,
         email: user.email,
         first_name: user.first_name,
-        last_name: user.last_name,
+      last_name: user.last_name,
         ref_code: user.ref_code
       },
       accessToken
@@ -141,7 +145,7 @@ export const directLogin = async (req: Request, res: Response) => {
         id: user.id,
         email: user.email,
         first_name: user.first_name,
-        last_name: user.last_name,
+      last_name: user.last_name,
         ref_code: user.ref_code
       },
       accessToken

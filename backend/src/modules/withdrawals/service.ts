@@ -1,6 +1,8 @@
 import { prisma } from '../../lib/prisma';
 import { logger } from '../../utils/logger';
 import { BalanceService } from '../balance/service';
+import { telegramService } from '../../services/telegram';
+import { realTimeNotificationService } from '../../services/real-time-notifications';
 
 export class WithdrawalService {
   private balanceService: BalanceService;
@@ -9,57 +11,9 @@ export class WithdrawalService {
     this.balanceService = new BalanceService();
   }
 
-  // Update withdrawal with OTP ID
-  async updateWithdrawalOtpId(withdrawalId: string, otpId: string) {
-    try {
-      const withdrawal = await prisma.withdrawal.update({
-        where: { id: withdrawalId },
-        data: {
-          otp_id: otpId
-        }
-      });
 
-      return withdrawal;
-    } catch (error) {
-      logger.error('Error updating withdrawal OTP ID: ' + (error as Error).message);
-      throw error;
-    }
-  }
 
-  // Confirm withdrawal OTP
-  async confirmWithdrawalOtp(withdrawalId: string, userId: string) {
-    try {
-      const withdrawal = await prisma.withdrawal.findFirst({
-        where: {
-          id: withdrawalId,
-          user_id: userId,
-          status: 'requested'
-        }
-      });
 
-      if (!withdrawal) {
-        return null;
-      }
-
-      const updatedWithdrawal = await prisma.withdrawal.update({
-        where: { id: withdrawalId },
-        data: {
-          status: 'otp_verified'
-        }
-      });
-
-      return {
-        id: updatedWithdrawal.id,
-        amount_usdt: Number(updatedWithdrawal.amount_usdt).toFixed(6),
-        status: updatedWithdrawal.status,
-        created_at: updatedWithdrawal.created_at,
-        payout_address: updatedWithdrawal.payout_address
-      };
-    } catch (error) {
-      logger.error('Error confirming withdrawal OTP: ' + (error as Error).message);
-      throw error;
-    }
-  }
 
   // Get user withdrawals with transformed data
   async getUserWithdrawals(userId: string) {
@@ -96,13 +50,12 @@ export class WithdrawalService {
       const settings = await prisma.setting.findMany({
         where: {
           key: {
-            in: ['min_withdrawal_amount', 'withdrawal_fee_usdt']
+            in: ['min_withdrawal_amount']
           }
         }
       });
       
       const MIN_WITHDRAWAL = parseFloat(String(settings.find(s => s.key === 'min_withdrawal_amount')?.value || '10'));
-      const GAS_FEE = parseFloat(String(settings.find(s => s.key === 'withdrawal_fee_usdt')?.value || '2'));
       
       if (amount < MIN_WITHDRAWAL) {
         throw new Error(`Minimum amount is $${MIN_WITHDRAWAL}`);
@@ -113,22 +66,68 @@ export class WithdrawalService {
         throw new Error('Wallet address is required');
       }
 
-      // Check available balance (including gas fee)
-      const totalRequired = amount + GAS_FEE;
+      // Check available balance
       const balance = await this.balanceService.getUserSnapshot(userId);
-      if (Number(balance.available) < totalRequired) {
-        throw new Error('Insufficient balance (including 2 USDT gas agent fee)');
+      if (Number(balance.available) < amount) {
+        throw new Error('Insufficient balance');
       }
 
-      // Create withdrawal request
-      const withdrawal = await prisma.withdrawal.create({
-        data: {
-          user_id: userId,
-          amount_usdt: totalRequired, // Store total amount including fee
-          payout_address: walletAddress,
-          status: 'requested'
-        }
+      // Use transaction to ensure consistency
+      const withdrawal = await prisma.$transaction(async (tx) => {
+        // Create withdrawal request
+        const newWithdrawal = await tx.withdrawal.create({
+          data: {
+            user_id: userId,
+            amount_usdt: amount, // Store withdrawal amount only
+            payout_address: walletAddress,
+            status: 'requested'
+          }
+        });
+
+        // Deduct balance (withdrawal amount only)
+        await tx.ledgerEntry.create({
+          data: {
+            user_id: userId,
+            direction: 'debit',
+            amount: amount,
+            available_balance_after: 0, // Will be calculated by balance service
+            ref_type: 'withdrawal',
+            ref_id: newWithdrawal.id,
+            meta: {
+              withdrawal_amount: amount
+            }
+          }
+        });
+
+        return newWithdrawal;
       });
+
+      // Send notifications to admin
+      try {
+        const user = await prisma.user.findUnique({
+          where: { id: userId },
+          select: { first_name: true, last_name: true, email: true }
+        });
+
+        if (user) {
+          const withdrawalData = {
+            id: withdrawal.id,
+            amount_usdt: amount,
+            payout_address: walletAddress,
+            created_at: withdrawal.created_at,
+            user
+          };
+
+          // Send Telegram alert to admin
+          await telegramService.sendWithdrawalAlert('new', withdrawalData);
+          
+          // Send real-time notification
+          await realTimeNotificationService.sendWithdrawalNotification('requested', withdrawalData);
+        }
+      } catch (notificationError) {
+        logger.error('Error sending withdrawal notifications: ' + (notificationError as Error).message);
+        // Don't throw error for notification failures
+      }
 
       return {
         id: withdrawal.id,
@@ -167,7 +166,7 @@ export class WithdrawalService {
                 id: true,
                 email: true,
                 first_name: true,
-                last_name: true
+        last_name: true
               }
             },
             approved_by: {
@@ -191,7 +190,7 @@ export class WithdrawalService {
             id: w.user.id,
             email: w.user.email,
             first_name: w.user.first_name,
-            last_name: w.user.last_name
+        last_name: w.user.last_name
           },
           amount_usdt: Number(w.amount_usdt).toFixed(6),
           status: w.status,
@@ -230,7 +229,7 @@ export class WithdrawalService {
       }
 
       if (withdrawal.status !== 'requested') {
-        throw new Error('Withdrawal is not in requested status');
+        throw new Error(`Withdrawal is not in requested status. Current status: '${withdrawal.status}'`);
       }
 
       const updatedWithdrawal = await prisma.withdrawal.update({
@@ -238,8 +237,33 @@ export class WithdrawalService {
         data: {
           status: 'approved',
           approved_by_admin_id: adminId
+        },
+        include: {
+          user: {
+            select: { first_name: true, last_name: true, email: true }
+          }
         }
       });
+
+      // Send notifications
+      try {
+        const withdrawalData = {
+          id: updatedWithdrawal.id,
+          amount_usdt: Number(updatedWithdrawal.amount_usdt),
+          payout_address: updatedWithdrawal.payout_address,
+          created_at: updatedWithdrawal.created_at,
+          user: updatedWithdrawal.user,
+          user_id: updatedWithdrawal.user_id
+        };
+
+        // Send Telegram alert to admin
+        await telegramService.sendWithdrawalAlert('approved', withdrawalData);
+        
+        // Send real-time notification to user
+        await realTimeNotificationService.sendWithdrawalNotification('approved', withdrawalData);
+      } catch (notificationError) {
+        logger.error('Error sending approval notifications: ' + (notificationError as Error).message);
+      }
 
       return {
         id: updatedWithdrawal.id,
@@ -267,6 +291,8 @@ export class WithdrawalService {
       if (withdrawal.status !== 'approved') {
         throw new Error('Withdrawal must be approved before marking as paid');
       }
+
+
 
       // Use transaction to ensure consistency
       const result = await prisma.$transaction(async (tx) => {
@@ -328,7 +354,7 @@ export class WithdrawalService {
         throw new Error('Unauthorized to cancel this withdrawal');
       }
 
-      if (!['requested', 'otp_sent'].includes(withdrawal.status)) {
+      if (withdrawal.status !== 'requested') {
         throw new Error('Withdrawal cannot be canceled in current status');
       }
 
@@ -425,6 +451,31 @@ export class WithdrawalService {
         return updatedWithdrawal;
       });
 
+      // Send notifications
+      try {
+        const withdrawalData = {
+          id: result.id,
+          amount_usdt: Number(withdrawal.amount_usdt),
+          payout_address: withdrawal.payout_address,
+          created_at: withdrawal.created_at,
+          user: {
+            first_name: withdrawal.user.first_name,
+            last_name: withdrawal.user.last_name,
+            email: withdrawal.user.email
+          },
+          user_id: withdrawal.user_id,
+          rejection_reason: reason
+        };
+
+        // Send Telegram alert to admin
+        await telegramService.sendWithdrawalAlert('rejected', withdrawalData);
+        
+        // Send real-time notification to user
+        await realTimeNotificationService.sendWithdrawalNotification('rejected', withdrawalData);
+      } catch (notificationError) {
+        logger.error('Error sending rejection notifications: ' + (notificationError as Error).message);
+      }
+
       return {
         id: result.id,
         status: result.status,
@@ -447,7 +498,7 @@ export class WithdrawalService {
             select: {
               email: true,
               first_name: true,
-              last_name: true
+        last_name: true
             }
           }
         },

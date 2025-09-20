@@ -1,4 +1,4 @@
-import express from 'express';
+import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
 import dotenv from 'dotenv';
@@ -20,7 +20,11 @@ import { sseRoutes } from './modules/sse/routes';
 import referralRoutes from './modules/referrals/routes';
 import { notificationRoutes } from './modules/notifications/routes';
 import telegramRoutes from './modules/telegram/routes';
+import telegramCommunicationRoutes from './routes/telegram';
+import telegramAdminRoutes from './routes/telegram-admin';
 import { systemRoutes } from './modules/system/routes';
+// Import OTP routes (JavaScript module)
+const otpRoutes = require('../routes/otp');
 import { sseService } from './services/sse';
 import { authMiddleware, adminMiddleware } from './lib/middleware';
 
@@ -30,6 +34,8 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 5000;
 
+// Ensure correct proxy handling for secure cookies and HTTPS behind Nginx
+app.set('trust proxy', 1);
 
 
 // Middleware
@@ -41,11 +47,11 @@ app.use(express.json());
 app.use(cookieParser(process.env.COOKIE_SECRET));
 
 // Health checks
-app.get('/api/v1/health', (req, res) => {
+app.get('/api/v1/health', (req: Request, res: Response) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
-app.get('/api/v1/admin/health', authMiddleware, adminMiddleware, (req, res) => {
+app.get('/api/v1/admin/health', authMiddleware, adminMiddleware, (req: Request, res: Response) => {
   res.json({ 
     status: 'ok', 
     timestamp: new Date().toISOString(),
@@ -58,7 +64,7 @@ app.get('/api/v1/admin/health', authMiddleware, adminMiddleware, (req, res) => {
 });
 
 // API routes logging middleware
-app.use('/api/v1', (req, res, next) => {
+app.use('/api/v1', (req: Request, res: Response, next: NextFunction) => {
   logger.info({ method: req.method, url: req.url }, 'API Request');
   next();
 });
@@ -77,10 +83,13 @@ app.use('/api/v1/sse', sseRoutes);
 app.use('/api/v1', referralRoutes);
 app.use('/api/v1/notifications', notificationRoutes);
 app.use('/api/v1/telegram', telegramRoutes);
+app.use('/api/v1/telegram-communication', telegramCommunicationRoutes);
+app.use('/api/v1/telegram-admin', telegramAdminRoutes);
 app.use('/api/v1/system', systemRoutes);
+app.use('/api/v1/otp', otpRoutes);
 
 // 404 handler
-app.use((req, res) => {
+app.use((req: Request, res: Response) => {
   res.status(404).json({ error: 'Route not found', path: req.path });
 });
 
@@ -100,50 +109,45 @@ const systemMonitoringQueue = new Queue('systemMonitoring', { connection: redis 
 const dailySummaryQueue = new Queue('dailySummary', { connection: redis });
 const withdrawalExpirerQueue = new Queue('withdrawalExpirer', { connection: redis });
 
-// Schedule dailyEarnings job to run every minute for testing
+// Schedule dailyEarnings job to run every hour for proper 24h individual timing
 const scheduleDailyEarnings = async () => {
   try {
-    // Remove existing repeatable jobs
     const repeatableJobs = await dailyEarningsQueue.getRepeatableJobs();
     for (const job of repeatableJobs) {
       await dailyEarningsQueue.removeRepeatableByKey(job.key);
     }
     
-    // Add new repeatable job every minute
     await dailyEarningsQueue.add(
       'processDailyEarnings',
       {},
       {
         repeat: {
-          pattern: '* * * * *' // Every minute for testing
+          pattern: '0 * * * *'
         },
         removeOnComplete: 10,
         removeOnFail: 5
       }
     );
     
-    logger.info('Daily earnings job scheduled to run every minute');
+    logger.info('Daily earnings job scheduled to run every hour (respects 24h individual timing)');
   } catch (error) {
     logger.error({ error }, 'Failed to schedule daily earnings job');
   }
 };
 
-// Schedule system monitoring job to run every 30 minutes
 const scheduleSystemMonitoring = async () => {
   try {
-    // Remove existing repeatable jobs
     const repeatableJobs = await systemMonitoringQueue.getRepeatableJobs();
     for (const job of repeatableJobs) {
       await systemMonitoringQueue.removeRepeatableByKey(job.key);
     }
     
-    // Add new repeatable job every 30 minutes
     await systemMonitoringQueue.add(
       'systemMonitoring',
       {},
       {
         repeat: {
-          pattern: '*/30 * * * *' // Every 30 minutes
+          pattern: '0,30 * * * *'
         },
         removeOnComplete: 5,
         removeOnFail: 3
@@ -156,22 +160,19 @@ const scheduleSystemMonitoring = async () => {
   }
 };
 
-// Schedule daily summary job to run at 9:00 AM every day
 const scheduleDailySummary = async () => {
   try {
-    // Remove existing repeatable jobs
     const repeatableJobs = await dailySummaryQueue.getRepeatableJobs();
     for (const job of repeatableJobs) {
       await dailySummaryQueue.removeRepeatableByKey(job.key);
     }
     
-    // Add new repeatable job at 9:00 AM daily
     await dailySummaryQueue.add(
       'dailySummary',
       {},
       {
         repeat: {
-          pattern: '0 9 * * *' // Every day at 9:00 AM
+          pattern: '0 9 * * *'
         },
         removeOnComplete: 7,
         removeOnFail: 3
@@ -184,22 +185,19 @@ const scheduleDailySummary = async () => {
   }
 };
 
-// Schedule withdrawal expirer job to run every hour
 const scheduleWithdrawalExpirer = async () => {
   try {
-    // Remove existing repeatable jobs
     const repeatableJobs = await withdrawalExpirerQueue.getRepeatableJobs();
     for (const job of repeatableJobs) {
       await withdrawalExpirerQueue.removeRepeatableByKey(job.key);
     }
     
-    // Add new repeatable job every hour
     await withdrawalExpirerQueue.add(
       'processWithdrawalExpirer',
       {},
       {
         repeat: {
-          pattern: '0 * * * *' // Every hour at minute 0
+          pattern: '0 * * * *'
         },
         removeOnComplete: 10,
         removeOnFail: 5
@@ -221,7 +219,7 @@ app.listen(PORT, async () => {
   sseService.start();
   logger.info('📡 SSE service initialized');
   
-  // Schedule all jobs
+  // Enable automatic processing
   await scheduleDailyEarnings();
   await scheduleSystemMonitoring();
   await scheduleDailySummary();

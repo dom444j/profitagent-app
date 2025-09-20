@@ -13,6 +13,7 @@ interface AdminProfile {
   ref_code: string;
   phone?: string;
   telegram_user_id?: string;
+  telegram_username?: string;
   telegram_link_status?: 'pending' | 'linked' | 'failed';
   role: string;
   status: string;

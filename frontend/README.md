@@ -1,6 +1,6 @@
-# Grow5x Frontend
+# ProFitAgent Frontend
 
-React frontend application for the Grow5x platform for AI-powered technological tool licenses.
+React frontend application for the ProFitAgent platform for AI-powered technological tool licenses.
 
 ## Features
 
@@ -115,3 +115,4 @@ The built files will be in the `dist/` directory.
 2. Use TypeScript for all new code
 3. Add proper error handling
 4. Test your changes thoroughly
+

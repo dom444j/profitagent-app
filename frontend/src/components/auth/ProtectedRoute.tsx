@@ -28,10 +28,8 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, adminOnly = f
     return <Navigate to="/user/dashboard" replace />;
   }
 
-  // Si es admin pero está en rutas de usuario, redirigir al panel admin
-  if (user.role === 'admin' && !adminOnly && window.location.pathname.startsWith('/user/')) {
-    return <Navigate to="/admin/dashboard" replace />;
-  }
+  // Los administradores pueden acceder a cualquier ruta
+  // Solo redirigir usuarios normales que intenten acceder a rutas de admin
 
   return <>{children}</>;
 };

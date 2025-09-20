@@ -1,113 +1,225 @@
 import axios from 'axios';
+import crypto from 'crypto';
+import Redis from 'ioredis';
 import { logger } from '../utils/logger';
 import { prisma } from '../lib/prisma';
-import * as crypto from 'crypto';
 
 interface TelegramMessage {
-  chat_id: string;
+  chat_id: string | number;
   text: string;
   parse_mode?: 'HTML' | 'Markdown';
 }
 
-interface OTPData {
-  userId: string;
-  code: string;
-  type: 'withdrawal' | 'password_reset' | '2fa';
-  expiresAt: Date;
+interface TelegramResponse {
+  ok: boolean;
+  result?: any;
+  description?: string;
 }
 
-export class TelegramService {
-  private otpBotToken: string;
+interface OTPStats {
+  total: number;
+  active: number;
+  expired: number;
+}
+
+interface HealthStatus {
+  telegram: boolean;
+  redis: boolean;
+  totalOTPs?: number;
+}
+
+class TelegramService {
+  private botToken: string;
   private otpChatId: string;
-  private alertsBotToken: string;
   private alertsChatId: string;
-  private otpStorage: Map<string, OTPData> = new Map();
+  private redis: Redis;
 
   constructor() {
-    this.otpBotToken = process.env.TELEGRAM_OTP_BOT_TOKEN!;
-    this.otpChatId = process.env.TELEGRAM_OTP_CHAT_ID!;
-    this.alertsBotToken = process.env.TELEGRAM_ALERTS_BOT_TOKEN!;
-    this.alertsChatId = process.env.TELEGRAM_ALERTS_CHAT_ID!;
+    this.botToken = process.env.TELEGRAM_BOT_TOKEN || '';
+    this.otpChatId = process.env.TELEGRAM_OTP_CHAT_ID || '';
+    this.alertsChatId = process.env.TELEGRAM_ALERTS_CHAT_ID || '';
+    
+    const redisConfig: any = {
+      host: process.env.REDIS_HOST || 'localhost',
+      port: parseInt(process.env.REDIS_PORT || '6379'),
+      maxRetriesPerRequest: 3,
+    };
+    
+    if (process.env.REDIS_PASSWORD) {
+      redisConfig.password = process.env.REDIS_PASSWORD;
+    }
+    
+    this.redis = new Redis(redisConfig);
 
-    if (!this.otpBotToken || !this.alertsBotToken) {
-      logger.error('Telegram bot tokens not configured');
-      throw new Error('Telegram bot tokens not configured');
+    if (!this.botToken) {
+      logger.warn('TELEGRAM_BOT_TOKEN not configured');
+    }
+    if (!this.otpChatId) {
+      logger.warn('TELEGRAM_OTP_CHAT_ID not configured');
+    }
+    if (!this.alertsChatId) {
+      logger.warn('TELEGRAM_ALERTS_CHAT_ID not configured');
     }
   }
 
-  // Send message using OTP bot
-  private async sendOTPMessage(message: TelegramMessage): Promise<boolean> {
+  async sendMessage(message: TelegramMessage, retries = 3): Promise<boolean> {
+    if (!this.botToken) {
+      logger.warn('Telegram bot token not configured');
+      return false;
+    }
+
     try {
-      const url = `https://api.telegram.org/bot${this.otpBotToken}/sendMessage`;
-      const response = await axios.post(url, message);
-      
+      const response = await axios.post(
+        `https://api.telegram.org/bot${this.botToken}/sendMessage`,
+        message,
+        {
+          timeout: 10000,
+          headers: {
+            'Content-Type': 'application/json'
+          }
+        }
+      );
+
       if (response.data.ok) {
-        logger.info('OTP message sent successfully');
+        return true;
+      } else {
+        logger.error('Failed to send Telegram message:', response.data);
+        return false;
+      }
+    } catch (error: any) {
+      this.logTelegramError(error, 'sendMessage', message.chat_id);
+      
+      const errorMsg = error.response?.data?.description || error.message;
+      
+      // Handle rate limiting
+      if (errorMsg.includes('Too Many Requests') && retries > 0) {
+        const retryAfter = error.response?.data?.parameters?.retry_after || 1;
+        logger.warn(`Rate limited, retrying after ${retryAfter} seconds`);
+        await new Promise(resolve => setTimeout(resolve, retryAfter * 1000));
+        return this.sendMessage(message, retries - 1);
+      }
+      
+      return false;
+    }
+  }
+
+  // Send OTP messages (withdrawal, password reset)
+  private async sendOTPMessage(message: TelegramMessage, retries = 3): Promise<boolean> {
+    if (!this.botToken) {
+      logger.warn('Telegram bot token not configured');
+      return false;
+    }
+
+    try {
+      const response = await axios.post(
+        `https://api.telegram.org/bot${this.botToken}/sendMessage`,
+        message,
+        {
+          timeout: 15000,
+          headers: {
+            'Content-Type': 'application/json'
+          }
+        }
+      );
+
+      if (response.data.ok) {
+        logger.info(`OTP message sent successfully to chat ${message.chat_id}`);
         return true;
       } else {
         logger.error('Failed to send OTP message:', response.data);
         return false;
       }
-    } catch (error) {
-      logger.error('Error sending OTP message:', error);
+    } catch (error: any) {
+      this.logTelegramError(error, 'sendOTPMessage', message.chat_id);
+      
+      const errorMsg = error.response?.data?.description || error.message;
+      
+      // Handle rate limiting
+      if (errorMsg.includes('Too Many Requests') && retries > 0) {
+        const retryAfter = error.response?.data?.parameters?.retry_after || 1;
+        logger.warn(`Rate limited, retrying after ${retryAfter} seconds`);
+        await new Promise(resolve => setTimeout(resolve, retryAfter * 1000));
+        return this.sendOTPMessage(message, retries - 1);
+      }
+      
       return false;
     }
   }
 
-  // Send message using Alerts bot
-  private async sendAlertMessage(message: TelegramMessage): Promise<boolean> {
+  // Send alert messages (system notifications)
+  private async sendAlertMessage(message: TelegramMessage, retries = 3): Promise<boolean> {
+    if (!this.botToken) {
+      logger.warn('Telegram bot token not configured');
+      return false;
+    }
+
     try {
-      const url = `https://api.telegram.org/bot${this.alertsBotToken}/sendMessage`;
-      const response = await axios.post(url, message);
-      
+      const response = await axios.post(
+        `https://api.telegram.org/bot${this.botToken}/sendMessage`,
+        message,
+        {
+          timeout: 10000,
+          headers: {
+            'Content-Type': 'application/json'
+          }
+        }
+      );
+
       if (response.data.ok) {
-        logger.info('Alert message sent successfully');
         return true;
       } else {
         logger.error('Failed to send alert message:', response.data);
         return false;
       }
-    } catch (error) {
-      logger.error('Error sending alert message:', error);
+    } catch (error: any) {
+      this.logTelegramError(error, 'sendAlertMessage', message.chat_id);
+      
+      const errorMsg = error.response?.data?.description || error.message;
+      
+      // Handle rate limiting
+      if (errorMsg.includes('Too Many Requests') && retries > 0) {
+        const retryAfter = error.response?.data?.parameters?.retry_after || 1;
+        logger.warn(`Rate limited, retrying after ${retryAfter} seconds`);
+        await new Promise(resolve => setTimeout(resolve, retryAfter * 1000));
+        return this.sendAlertMessage(message, retries - 1);
+      }
+      
       return false;
     }
   }
 
-  // Generate and send OTP for withdrawal
+  // Send withdrawal OTP
   async sendWithdrawalOTP(userId: string, withdrawalId: string, amount: number): Promise<{ success: boolean; otpId?: string }> {
     try {
-      // Get user info
       const user = await prisma.user.findUnique({
         where: { id: userId },
-        select: { email: true, first_name: true, last_name: true, telegram_user_id: true }
+        select: { first_name: true, last_name: true, email: true, telegram_user_id: true }
       });
 
       if (!user) {
-        logger.error('User not found for withdrawal OTP');
         return { success: false };
       }
 
-      // Generate 6-digit OTP
       const otpCode = crypto.randomInt(100000, 999999).toString();
       const otpId = crypto.randomUUID();
       const expiresAt = new Date(Date.now() + 4 * 60 * 60 * 1000); // 4 hours
 
-      // Store OTP
-      this.otpStorage.set(otpId, {
+      const otpData = {
         userId,
         code: otpCode,
         type: 'withdrawal',
-        expiresAt
-      });
+        expiresAt: expiresAt.toISOString()
+      };
+      await this.redis.setex(`otp:${otpId}`, 4 * 60 * 60, JSON.stringify(otpData)); // 4 hours TTL
 
-      // Prepare message
-      const message: TelegramMessage = {
+      // Prepare message for admin (always sent)
+      const adminMessage: TelegramMessage = {
         chat_id: this.otpChatId,
         text: `🔐 <b>Código OTP para Retiro</b>\n\n` +
               `👤 Usuario: ${user.first_name} ${user.last_name}\n` +
               `📧 Email: ${user.email}\n` +
-              `💰 Monto: $${amount} USDT\n\n` +
-              `🔢 <b>CÓDIGO OTP (6 dígitos):</b>\n` +
+              `💰 Monto: ${amount} USDT\n\n` +
+              `📢 <b>CÓDIGO OTP (6 dígitos):</b>\n` +
               `<code>${otpCode}</code>\n\n` +
               `⏰ Válido por: 4 horas\n\n` +
               `📋 <i>ID Retiro: ${withdrawalId}</i>\n\n` +
@@ -116,13 +228,35 @@ export class TelegramService {
         parse_mode: 'HTML'
       };
 
-      const sent = await this.sendOTPMessage(message);
+      // Send to admin (always)
+      const adminSent = await this.sendOTPMessage(adminMessage);
+      let userSent = false;
+
+      // Send to user if they have Telegram configured
+      if (user.telegram_user_id) {
+        const userMessage: TelegramMessage = {
+          chat_id: user.telegram_user_id,
+          text: `🔐 <b>Código OTP para tu Retiro</b>\n\n` +
+                `💰 Monto: ${amount} USDT\n\n` +
+                `📢 <b>Tu código OTP:</b>\n` +
+                `<code>${otpCode}</code>\n\n` +
+                `⏰ Válido por: 4 horas\n\n` +
+                `⚠️ Ingresa este código en la plataforma para confirmar tu retiro.`,
+          parse_mode: 'HTML'
+        };
+        
+        try {
+          userSent = await this.sendOTPMessage(userMessage);
+        } catch (error) {
+          logger.warn(`Failed to send OTP to user ${userId} via Telegram: ${(error as Error).message}`);
+        }
+      }
       
-      if (sent) {
-        logger.info(`Withdrawal OTP sent for user ${userId}, withdrawal ${withdrawalId}`);
+      if (adminSent) {
+        logger.info(`Withdrawal OTP sent for user ${userId}, withdrawal ${withdrawalId}. Admin: ${adminSent}, User: ${userSent}`);
         return { success: true, otpId };
       } else {
-        this.otpStorage.delete(otpId);
+        await this.redis.del(`otp:${otpId}`);
         return { success: false };
       }
     } catch (error) {
@@ -131,26 +265,27 @@ export class TelegramService {
     }
   }
 
-  // Verify OTP code
   async verifyOTP(otpId: string, code: string): Promise<{ valid: boolean; userId?: string; type?: string }> {
     try {
-      const otpData = this.otpStorage.get(otpId);
+      const otpDataStr = await this.redis.get(`otp:${otpId}`);
       
-      if (!otpData) {
+      if (!otpDataStr) {
         logger.warn('OTP not found or expired');
         return { valid: false };
       }
 
-      // Check expiration
-      if (new Date() > otpData.expiresAt) {
-        this.otpStorage.delete(otpId);
+      const otpData = JSON.parse(otpDataStr);
+      
+      // Check expiration (Redis TTL should handle this, but double-check)
+      if (new Date() > new Date(otpData.expiresAt)) {
+        await this.redis.del(`otp:${otpId}`);
         logger.warn('OTP expired');
         return { valid: false };
       }
 
       // Verify code
       if (otpData.code === code) {
-        this.otpStorage.delete(otpId); // Remove after successful verification
+        await this.redis.del(`otp:${otpId}`); // Remove after successful verification
         logger.info(`OTP verified successfully for user ${otpData.userId}`);
         return { valid: true, userId: otpData.userId, type: otpData.type };
       } else {
@@ -179,19 +314,20 @@ export class TelegramService {
       const otpId = crypto.randomUUID();
       const expiresAt = new Date(Date.now() + 15 * 60 * 1000); // 15 minutes
 
-      this.otpStorage.set(otpId, {
+      const otpData = {
         userId,
         code: otpCode,
         type: 'password_reset',
-        expiresAt
-      });
+        expiresAt: expiresAt.toISOString()
+      };
+      await this.redis.setex(`otp:${otpId}`, 15 * 60, JSON.stringify(otpData)); // 15 minutes TTL
 
       const message: TelegramMessage = {
         chat_id: this.otpChatId,
-        text: `🔑 <b>Código de Recuperación de Contraseña</b>\n\n` +
+        text: `🔒 <b>Código de Recuperación de Contraseña</b>\n\n` +
               `👤 Usuario: ${user.first_name} ${user.last_name}\n` +
               `📧 Email: ${email}\n` +
-              `🔢 Código: <code>${otpCode}</code>\n` +
+              `📢 Código: <code>${otpCode}</code>\n` +
               `⏰ Válido por: 15 minutos\n\n` +
               `⚠️ Si no solicitaste este código, ignora este mensaje.`,
         parse_mode: 'HTML'
@@ -202,7 +338,7 @@ export class TelegramService {
       if (sent) {
         return { success: true, otpId };
       } else {
-        this.otpStorage.delete(otpId);
+        await this.redis.del(`otp:${otpId}`);
         return { success: false };
       }
     } catch (error) {
@@ -218,7 +354,7 @@ export class TelegramService {
       
       const alertMessage: TelegramMessage = {
         chat_id: this.alertsChatId,
-        text: `${emoji} <b>${title}</b>\n\n${message}\n\n🕐 ${new Date().toLocaleString('es-CO', { timeZone: 'America/Bogota' })}`,
+        text: `${emoji} <b>ProFitAgent - ${title}</b>\n\n${message}\n\n🤖 Sistema de Alertas ProFitAgent\n🕐 ${new Date().toLocaleString('es-CO', { timeZone: 'America/Bogota' })}`,
         parse_mode: 'HTML'
       };
 
@@ -257,13 +393,14 @@ export class TelegramService {
       const amount = withdrawalData.amount_usdt || withdrawalData.amount || 0;
       const message: TelegramMessage = {
         chat_id: this.alertsChatId,
-        text: `${emoji} <b>${title}</b>\n\n` +
+        text: `${emoji} <b>ProFitAgent - ${title}</b>\n\n` +
               `👤 Usuario: ${withdrawalData.user?.first_name} ${withdrawalData.user?.last_name}\n` +
               `📧 Email: ${withdrawalData.user?.email}\n` +
               `💰 Monto: $${Number(amount).toFixed(2)} USDT\n` +
               `🏦 Dirección: ${withdrawalData.payout_address || withdrawalData.usdt_address}\n` +
               `🆔 ID: ${withdrawalData.id}\n` +
               `📅 Fecha: ${new Date(withdrawalData.created_at).toLocaleString('es-CO')}\n\n` +
+              `🤖 Sistema de Alertas ProFitAgent\n` +
               `🔗 Panel Admin: http://localhost:3000/admin/withdrawals`,
         parse_mode: 'HTML'
       };
@@ -276,35 +413,48 @@ export class TelegramService {
   }
 
   // Send order status alerts to admin
-  async sendOrderAlert(type: 'auto_confirmed' | 'validation_failed' | 'manual_review', orderData: any): Promise<boolean> {
+  async sendOrderAlert(type: 'new' | 'confirmed' | 'failed' | 'auto_confirmed' | 'validation_failed' | 'manual_confirmation_required', orderData: any): Promise<boolean> {
     try {
       let title = '';
       let emoji = '';
       
       switch (type) {
+        case 'new':
+          title = 'Nueva Orden Recibida';
+          emoji = '📦';
+          break;
+        case 'confirmed':
+          title = 'Orden Confirmada';
+          emoji = '✅';
+          break;
+        case 'failed':
+          title = 'Orden Fallida';
+          emoji = '❌';
+          break;
         case 'auto_confirmed':
           title = 'Orden Auto-Confirmada';
-          emoji = '✅';
+          emoji = '🤖';
           break;
         case 'validation_failed':
           title = 'Validación de Orden Fallida';
-          emoji = '❌';
-          break;
-        case 'manual_review':
-          title = 'Orden Requiere Revisión Manual';
           emoji = '⚠️';
+          break;
+        case 'manual_confirmation_required':
+          title = 'Confirmación Manual Requerida';
+          emoji = '👨‍💼';
           break;
       }
 
       const message: TelegramMessage = {
         chat_id: this.alertsChatId,
-        text: `${emoji} <b>${title}</b>\n\n` +
+        text: `${emoji} <b>ProFitAgent - ${title}</b>\n\n` +
               `👤 Usuario: ${orderData.user?.first_name} ${orderData.user?.last_name}\n` +
               `📧 Email: ${orderData.user?.email}\n` +
               `💰 Monto: $${orderData.amount} USDT\n` +
               `🆔 ID: ${orderData.id}\n` +
               `🔗 Hash: ${orderData.transaction_hash}\n` +
               `📅 Fecha: ${new Date(orderData.created_at).toLocaleString('es-CO')}\n\n` +
+              `🤖 Sistema de Alertas ProFitAgent\n` +
               `🔗 Panel Admin: http://localhost:3000/admin/orders`,
         parse_mode: 'HTML'
       };
@@ -316,50 +466,229 @@ export class TelegramService {
     }
   }
 
-  // Send Telegram account linking confirmation
-  async sendTelegramLinkConfirmation(telegramUserId: string, userName: string): Promise<boolean> {
+  // Get OTP statistics
+  async getOTPStats(): Promise<OTPStats> {
     try {
-      const message: TelegramMessage = {
-        chat_id: telegramUserId,
-        text: `🎉 <b>¡Cuenta vinculada exitosamente!</b>\n\n` +
-              `Hola ${userName}, tu cuenta de Telegram ha sido vinculada correctamente a tu perfil de Grow5x.\n\n` +
-              `✅ <b>Beneficios activados:</b>\n` +
-              `• Códigos OTP para retiros seguros\n` +
-              `• Notificaciones de transacciones\n` +
-              `• Alertas del sistema\n` +
-              `• Confirmaciones de órdenes\n\n` +
-              `🔐 Tu cuenta ahora está más segura con la verificación en dos pasos.\n\n` +
-              `📱 <i>Grow5x - Investor Panel</i>`,
-        parse_mode: 'HTML'
-      };
-
-      return await this.sendOTPMessage(message);
+      const keys = await this.redis.keys('otp:*');
+      const total = keys.length;
+      
+      let active = 0;
+      let expired = 0;
+      
+      for (const key of keys) {
+        const ttl = await this.redis.ttl(key);
+        if (ttl > 0) {
+          active++;
+        } else {
+          expired++;
+        }
+      }
+      
+      return { total, active, expired };
     } catch (error) {
-      logger.error('Error sending Telegram link confirmation:', error);
+      logger.error('Error getting OTP stats:', error);
+      return { total: 0, active: 0, expired: 0 };
+    }
+  }
+
+  // Clean expired OTPs
+  async cleanExpiredOTPs(): Promise<number> {
+    try {
+      const keys = await this.redis.keys('otp:*');
+      let cleaned = 0;
+      
+      for (const key of keys) {
+        const ttl = await this.redis.ttl(key);
+        if (ttl <= 0) {
+          await this.redis.del(key);
+          cleaned++;
+        }
+      }
+      
+      if (cleaned > 0) {
+        logger.info(`Cleaned ${cleaned} expired OTPs`);
+      }
+      
+      return cleaned;
+    } catch (error) {
+      logger.error('Error cleaning expired OTPs:', error);
+      return 0;
+    }
+  }
+
+  // Test Telegram connection
+  async testConnection(): Promise<boolean> {
+    try {
+      const response = await axios.get(
+        `https://api.telegram.org/bot${this.botToken}/getMe`,
+        { timeout: 5000 }
+      );
+      
+      return response.data.ok;
+    } catch (error) {
+      logger.error('Telegram connection test failed:', error);
       return false;
     }
   }
 
-  // Clean expired OTPs (should be called periodically)
-  cleanExpiredOTPs(): void {
-    const now = new Date();
-    for (const [otpId, otpData] of this.otpStorage.entries()) {
-      if (now > otpData.expiresAt) {
-        this.otpStorage.delete(otpId);
+  // Send account linking success message
+  async sendAccountLinkingSuccess(telegramUserId: string, userEmail: string): Promise<boolean> {
+    try {
+      const messageText = `🎉 <b>¡Cuenta vinculada exitosamente!</b>\n\n` +
+                          `📧 Email: ${userEmail}\n\n` +
+                          `✅ Tu cuenta de Telegram ha sido vinculada correctamente.\n` +
+                          `🔐 Ahora recibirás códigos OTP directamente aquí.\n\n` +
+                          `🔒 Beneficios de la vinculación:\n` +
+                          `• Códigos OTP instantáneos\n` +
+                          `• Notificaciones de seguridad\n` +
+                          `🔍 Tu cuenta ahora está más segura con la verificación en dos pasos.\n\n` +
+                          `📱 <i>profitagent - Investor Panel</i>`;
+
+      const message: TelegramMessage = {
+        chat_id: telegramUserId,
+        text: messageText,
+        parse_mode: 'HTML'
+      };
+
+      const sent = await this.sendMessage(message);
+      
+      if (!sent) {
+        // If direct message fails, try sending to admin chat as fallback
+        logger.warn(`Failed to send direct message to user ${telegramUserId}, sending to admin chat`);
+        
+        const fallbackMessage: TelegramMessage = {
+          chat_id: this.alertsChatId,
+          text: `⚠️ <b>Vinculación exitosa pero mensaje no entregado</b>\n\n` +
+                `📧 Usuario: ${userEmail}\n` +
+                `👤 Telegram ID: ${telegramUserId}\n\n` +
+                `✅ La cuenta fue vinculada correctamente pero no se pudo enviar el mensaje de confirmación al usuario.`
+        };
+        
+        await this.sendAlertMessage(fallbackMessage);
+        
+        // Also try with username format if numeric ID failed
+        const fallbackMessageText = `🎉 <b>¡Cuenta vinculada exitosamente!</b>\n\n` +
+                                    `📧 Email: ${userEmail}\n\n` +
+                                    `✅ Tu cuenta de Telegram ha sido vinculada correctamente.\n` +
+                                    `🔐 Ahora recibirás códigos OTP directamente aquí.\n\n` +
+                                    `🔒 Beneficios de la vinculación:\n` +
+                                    `• Códigos OTP instantáneos\n` +
+                                    `• Notificaciones de seguridad\n` +
+                                    `🔍 Para mayor seguridad, actualiza a ID numérico cuando sea posible.\n\n` +
+                                    `📱 <i>profitagent - Investor Panel</i>`;
+        
+        const fallbackDirectMessage: TelegramMessage = {
+          chat_id: `@${telegramUserId}`,
+          text: fallbackMessageText,
+          parse_mode: 'HTML'
+        };
+        
+        return await this.sendMessage(fallbackDirectMessage);
       }
+      
+      return sent;
+    } catch (error) {
+      logger.error('Error sending account linking success message:', error);
+      return false;
     }
   }
 
-  // Get OTP statistics
-  getOTPStats(): { total: number; byType: Record<string, number> } {
-    const stats = { total: 0, byType: {} as Record<string, number> };
-    
-    for (const otpData of this.otpStorage.values()) {
-      stats.total++;
-      stats.byType[otpData.type] = (stats.byType[otpData.type] || 0) + 1;
+  // Send test message
+  async sendTestMessage(chatId: string, message: string): Promise<boolean> {
+    try {
+      const testMessage: TelegramMessage = {
+        chat_id: chatId,
+        text: `🧪 <b>Mensaje de Prueba</b>\n\n${message}\n\n🕐 ${new Date().toLocaleString('es-CO')}`,
+        parse_mode: 'HTML'
+      };
+
+      return await this.sendMessage(testMessage);
+    } catch (error) {
+      logger.error('Error sending test message:', error);
+      return false;
     }
+  }
+
+  // Get service health status
+  async getHealthStatus(): Promise<HealthStatus> {
+    const health: HealthStatus = {
+      telegram: false,
+      redis: false
+    };
+
+    // Test Telegram
+    try {
+      health.telegram = await this.testConnection();
+    } catch (error) {
+      logger.error('Telegram health check failed:', error);
+    }
+
+    try {
+      // Test Redis
+      await this.redis.ping();
+      health.redis = true;
+      
+      // Get OTP count
+      const stats = await this.getOTPStats();
+      health.totalOTPs = stats.total;
+    } catch (error) {
+      logger.error('Redis health check failed:', error);
+    }
+
+    return health;
+  }
+
+  async sendTelegramLinkConfirmation(telegramIdentifier: string, userName: string, fallbackUsername?: string): Promise<boolean> {
+    try {
+      const messageText = `🎉 <b>¡Cuenta vinculada exitosamente!</b>\n\n` +
+            `Hola ${userName}, tu cuenta de Telegram ha sido vinculada correctamente a tu perfil de profitagent.\n\n` +
+            `✅ <b>Beneficios activados:</b>\n` +
+            `• Códigos OTP para retiros seguros\n` +
+            `• Notificaciones de transacciones\n` +
+            `• Alertas del sistema\n` +
+            `• Confirmaciones de órdenes\n\n` +
+            `🔐 Tu cuenta ahora está más segura con la verificación en dos pasos.\n\n` +
+            `📱 <i>profitagent - Investor Panel</i>`;
+
+      const message: TelegramMessage = {
+        chat_id: telegramIdentifier,
+        text: messageText,
+        parse_mode: 'HTML'
+      };
+
+      const result = await this.sendOTPMessage(message);
+      if (result) {
+        logger.info(`Telegram confirmation sent successfully to ${telegramIdentifier}`);
+        return true;
+      } else {
+        logger.warn(`Failed to send confirmation to ${telegramIdentifier}`);
+        return false;
+      }
+    } catch (error) {
+      this.logTelegramError(error, 'sendTelegramLinkConfirmation', telegramIdentifier);
+      return false;
+    }
+  }
+
+  // Log Telegram error with context
+  private logTelegramError(error: any, context: string, chatId?: string | number): void {
+    const errorInfo = {
+      context,
+      chatId,
+      error: error.message,
+      response: error.response?.data,
+      status: error.response?.status
+    };
     
-    return stats;
+    if (error.response?.data?.description?.includes('chat not found')) {
+      logger.warn('Telegram chat not found:', errorInfo);
+    } else if (error.response?.data?.description?.includes('bot was blocked')) {
+      logger.warn('Telegram bot blocked by user:', errorInfo);
+    } else if (error.response?.status === 429) {
+      logger.warn('Telegram rate limit exceeded:', errorInfo);
+    } else {
+      logger.error('Telegram API error:', errorInfo);
+    }
   }
 }
 
@@ -367,6 +696,6 @@ export class TelegramService {
 export const telegramService = new TelegramService();
 
 // Clean expired OTPs every 5 minutes
-setInterval(() => {
-  telegramService.cleanExpiredOTPs();
+setInterval(async () => {
+  await telegramService.cleanExpiredOTPs();
 }, 5 * 60 * 1000);

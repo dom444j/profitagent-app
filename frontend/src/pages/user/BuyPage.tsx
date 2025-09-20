@@ -259,7 +259,7 @@ const BuyPage: React.FC = () => {
             <div>
               <div className="text-center mb-6 sm:mb-8">
                 <h2 className="text-xl sm:text-2xl lg:text-3xl font-bold bg-gradient-to-r from-slate-700 via-blue-600 to-indigo-700 bg-clip-text text-transparent mb-2">
-                  🤖 Licencias de Trading Bot IA
+                  🤖 Licencias de Arbitraje con Agentes Autónomos con IA
                 </h2>
                 <div className="max-w-4xl mx-auto px-4">
                   <p className="text-gray-700 text-sm sm:text-base lg:text-lg mb-4 font-medium">
@@ -283,15 +283,15 @@ const BuyPage: React.FC = () => {
                         </div>
                       </div>
                       <div className="flex items-start gap-3">
-                        <span className="text-purple-500 font-bold">🛡️</span>
+                        <span className="text-orange-500 font-bold">👥</span>
                         <div>
-                          <strong>Gestión de Riesgo:</strong> Algoritmos avanzados minimizan la exposición al riesgo
+                          <strong>Agentes Compartidos ($500-$2500):</strong> Recursos compartidos con múltiples usuarios
                         </div>
                       </div>
                       <div className="flex items-start gap-3">
-                        <span className="text-orange-500 font-bold">💎</span>
+                        <span className="text-purple-500 font-bold">🤖</span>
                         <div>
-                          <strong>Operación Automatizada:</strong> Agentes IA trabajando 24/7 con algoritmos avanzados
+                          <strong>Agentes Dedicados ($5000+):</strong> Recursos exclusivos con beneficios de independencia
                         </div>
                       </div>
                     </div>
@@ -340,6 +340,14 @@ const BuyPage: React.FC = () => {
                           <div className="flex justify-between items-center p-2.5 sm:p-3 bg-gradient-to-r from-purple-50 to-violet-50 rounded-xl">
                             <span className="text-gray-700 font-medium text-xs sm:text-sm">⏱️ Duración:</span>
                             <span className="font-bold text-purple-600 text-sm sm:text-lg">{product.duration_days} días</span>
+                          </div>
+                          <div className="flex justify-between items-center p-2.5 sm:p-3 bg-gradient-to-r from-slate-50 to-gray-50 rounded-xl">
+                            <span className="text-gray-700 font-medium text-xs sm:text-sm">🤖 Tipo:</span>
+                            {parseFloat(product.price_usdt) >= 5000 ? (
+                              <span className="font-bold text-purple-600 text-sm sm:text-lg">Agente Dedicado</span>
+                            ) : (
+                              <span className="font-bold text-orange-600 text-sm sm:text-lg">Agente Compartido</span>
+                            )}
                           </div>
                         </div>
                         <Button 

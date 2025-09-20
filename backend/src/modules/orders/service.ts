@@ -1,4 +1,3 @@
-import { DockerOrderService } from './docker-service';
 import { Decimal } from '@prisma/client/runtime/library';
 import { Queue } from 'bullmq';
 import Redis from 'ioredis';
@@ -27,22 +26,52 @@ class OrderService {
         throw new Error('No wallets available for assignment. Please contact administrator.');
       }
       
-      const order = await DockerOrderService.createOrder(
-        data.userId,
-        data.productId,
-        Number(data.amountUsdt),
-        assignedWallet.address
-      );
+      // Get order expiration time
+      const expirationMinutes = await settingsService.getOrderExpirationMinutes();
+      const expiresAt = new Date(Date.now() + expirationMinutes * 60 * 1000);
+      
+      // Create order using Prisma
+      const order = await prisma.orderDeposit.create({
+        data: {
+          user_id: data.userId,
+          product_id: data.productId,
+          amount_usdt: data.amountUsdt,
+          wallet_address: assignedWallet.address,
+          status: 'pending',
+          expires_at: expiresAt
+        },
+        include: {
+          product: {
+            select: {
+              name: true,
+              price_usdt: true
+            }
+          }
+        }
+      });
       
       // Schedule order expiration job
-      const expirationMinutes = await settingsService.getOrderExpirationMinutes();
       await orderQueue.add(
         'expireOrder',
         { orderId: order.id },
-        { delay: expirationMinutes * 60 * 1000 } // configurable minutes
+        { delay: expirationMinutes * 60 * 1000 }
       );
       
-      return order;
+      return {
+        id: order.id,
+        user_id: order.user_id,
+        product_id: order.product_id,
+        amount_usdt: Number(order.amount_usdt),
+        wallet_address: order.wallet_address,
+        status: order.status,
+        expires_at: order.expires_at,
+        created_at: order.created_at,
+        updated_at: order.updated_at,
+        product: {
+          name: order.product.name,
+          price_usdt: Number(order.product.price_usdt)
+        }
+      };
     } catch (error) {
       logger.error('Create order error: ' + (error as Error).message);
       throw error;
@@ -51,7 +80,43 @@ class OrderService {
   
   async getUserPendingOrder(userId: string) {
     try {
-      return await DockerOrderService.getUserPendingOrder(userId);
+      const pendingOrder = await prisma.orderDeposit.findFirst({
+        where: {
+          user_id: userId,
+          status: 'pending'
+        },
+        include: {
+          product: {
+            select: {
+              name: true,
+              price_usdt: true
+            }
+          }
+        },
+        orderBy: {
+          created_at: 'desc'
+        }
+      });
+      
+      if (!pendingOrder) {
+        return null;
+      }
+      
+      return {
+        id: pendingOrder.id,
+        user_id: pendingOrder.user_id,
+        product_id: pendingOrder.product_id,
+        amount_usdt: Number(pendingOrder.amount_usdt),
+        wallet_address: pendingOrder.wallet_address,
+        status: pendingOrder.status,
+        expires_at: pendingOrder.expires_at,
+        created_at: pendingOrder.created_at,
+        updated_at: pendingOrder.updated_at,
+        product: {
+          name: pendingOrder.product.name,
+          price_usdt: Number(pendingOrder.product.price_usdt)
+        }
+      };
     } catch (error) {
       logger.error('Get user pending order error: ' + (error as Error).message);
       throw error;
@@ -86,7 +151,41 @@ class OrderService {
   
   async getOrderById(id: string, userId: string) {
     try {
-      return await DockerOrderService.getOrderById(id, userId);
+      const order = await prisma.orderDeposit.findFirst({
+        where: {
+          id: id,
+          user_id: userId
+        },
+        include: {
+          product: {
+            select: {
+              name: true,
+              price_usdt: true
+            }
+          }
+        }
+      });
+      
+      if (!order) {
+        return null;
+      }
+      
+      return {
+        id: order.id,
+        user_id: order.user_id,
+        product_id: order.product_id,
+        amount_usdt: Number(order.amount_usdt),
+        wallet_address: order.wallet_address,
+        status: order.status,
+        tx_hash: order.tx_hash,
+        expires_at: order.expires_at,
+        created_at: order.created_at,
+        updated_at: order.updated_at,
+        product: {
+          name: order.product.name,
+          price_usdt: Number(order.product.price_usdt)
+        }
+      };
     } catch (error) {
       logger.error('Get order by id error: ' + (error as Error).message);
       throw error;
@@ -95,7 +194,55 @@ class OrderService {
   
   async submitTransaction(orderId: string, userId: string, txHash: string) {
     try {
-      return await DockerOrderService.submitTransaction(orderId, userId, txHash);
+      // First verify the order exists and belongs to the user
+      const existingOrder = await prisma.orderDeposit.findFirst({
+        where: {
+          id: orderId,
+          user_id: userId,
+          status: 'pending'
+        }
+      });
+      
+      if (!existingOrder) {
+        throw new Error('Order not found or not pending');
+      }
+      
+      // Update the order with transaction hash and set status to submitted
+      const updatedOrder = await prisma.orderDeposit.update({
+        where: {
+          id: orderId
+        },
+        data: {
+          tx_hash: txHash,
+          status: 'paid',
+          updated_at: new Date()
+        },
+        include: {
+          product: {
+            select: {
+              name: true,
+              price_usdt: true
+            }
+          }
+        }
+      }) as any;
+      
+      return {
+        id: updatedOrder.id,
+        user_id: updatedOrder.user_id,
+        product_id: updatedOrder.product_id,
+        amount_usdt: Number(updatedOrder.amount_usdt),
+        wallet_address: updatedOrder.wallet_address,
+        status: updatedOrder.status,
+        tx_hash: updatedOrder.tx_hash,
+        expires_at: updatedOrder.expires_at,
+        created_at: updatedOrder.created_at,
+        updated_at: updatedOrder.updated_at,
+        product: updatedOrder.product ? {
+          name: updatedOrder.product.name,
+          price_usdt: Number(updatedOrder.product.price_usdt)
+        } : null
+      };
     } catch (error) {
       logger.error('Submit transaction error: ' + (error as Error).message);
       throw error;
@@ -152,10 +299,18 @@ class OrderService {
           where: { id: orderId },
           data: {
             status: 'confirmed'
+          },
+          include: {
+            product: {
+              select: {
+                name: true,
+                price_usdt: true
+              }
+            }
           }
         });
         
-        // Create user license
+        // Create user license in pending status (requires manual activation)
         const license = await tx.userLicense.create({
           data: {
              user_id: order.user_id,
@@ -163,7 +318,7 @@ class OrderService {
              order_id: orderId,
              principal_usdt: order.amount_usdt,
              ends_at: new Date(Date.now() + product.duration_days * 24 * 60 * 60 * 1000),
-             status: 'active'
+             status: 'active' // License starts as active
            }
         });
         

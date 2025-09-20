@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { adminService } from './service';
 import { orderService } from '../orders/service';
 import { productService } from '../products/service';
-import { userNotificationSettingsService } from '../../services/user-notification-settings';
+// Removed user notification settings service - not documented
 import { logger } from '../../utils/logger';
 import '../../lib/middleware'; // Import to extend Request type
 
@@ -616,7 +616,7 @@ class AdminController {
           id: updatedUser.id,
           email: updatedUser.email,
           first_name: updatedUser.first_name,
-          last_name: updatedUser.last_name,
+        last_name: updatedUser.last_name,
           status: updatedUser.status
         }
       });
@@ -718,10 +718,12 @@ class AdminController {
   /**
    * GET /api/v1/admin/notification-settings/stats
    * Get notification settings statistics
+   * TEMPORARILY DISABLED - Service not available
    */
   async getNotificationStats(req: Request, res: Response) {
     try {
-      const stats = await userNotificationSettingsService.getNotificationStats();
+      // TODO: Implement notification settings service
+      const stats = {};
       
       return res.json({
         success: true,
@@ -732,6 +734,239 @@ class AdminController {
       return res.status(500).json({
         success: false,
         error: 'Internal server error'
+      });
+    }
+  }
+
+  /**
+   * POST /api/v1/admin/daily-earnings/trigger
+   * Manually trigger daily earnings processing
+   */
+  async triggerDailyEarnings(req: Request, res: Response) {
+    try {
+      const result = await adminService.triggerDailyEarnings();
+      
+      return res.json({
+        success: true,
+        message: 'Daily earnings processing triggered successfully',
+        data: result
+      });
+    } catch (error) {
+      logger.error(`Error triggering daily earnings: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      return res.status(500).json({
+        success: false,
+        error: 'Failed to trigger daily earnings processing'
+      });
+    }
+  }
+
+  // Activate a pending license
+  async activateLicense(req: Request, res: Response) {
+    try {
+      const { licenseId } = req.params;
+      const adminId = req.user?.id;
+
+      if (!adminId) {
+        return res.status(401).json({
+          success: false,
+          error: 'Admin authentication required'
+        });
+      }
+
+      if (!licenseId) {
+        return res.status(400).json({
+          success: false,
+          error: 'License ID is required'
+        });
+      }
+
+      const result = await adminService.activateLicense(licenseId, adminId);
+
+      if (!result) {
+        return res.status(404).json({
+          success: false,
+          error: 'License not found'
+        });
+      }
+
+      return res.json({
+        success: true,
+        message: 'License activated successfully',
+        data: result
+      });
+    } catch (error) {
+      logger.error(`Error activating license: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      return res.status(500).json({
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to activate license'
+      });
+    }
+  }
+
+  // Manually adjust license active days
+  async adjustLicenseDays(req: Request, res: Response) {
+    try {
+      const { licenseId } = req.params;
+      const { days, reason } = req.body;
+      const adminId = req.user?.id;
+
+      if (!adminId) {
+        return res.status(401).json({
+          success: false,
+          error: 'Admin authentication required'
+        });
+      }
+
+      if (!licenseId) {
+        return res.status(400).json({
+          success: false,
+          error: 'License ID is required'
+        });
+      }
+
+      if (typeof days !== 'number' || days < 0) {
+        return res.status(400).json({
+          success: false,
+          error: 'Days must be a non-negative number'
+        });
+      }
+
+      if (!reason || typeof reason !== 'string') {
+        return res.status(400).json({
+          success: false,
+          error: 'Reason is required'
+        });
+      }
+
+      const result = await adminService.adjustLicenseDays(licenseId, days, reason, adminId);
+
+      if (!result) {
+        return res.status(404).json({
+          success: false,
+          error: 'License not found'
+        });
+      }
+
+      return res.json({
+        success: true,
+        message: 'License days adjusted successfully',
+        data: result
+      });
+    } catch (error) {
+      logger.error(`Error adjusting license days: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      return res.status(500).json({
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to adjust license days'
+      });
+    }
+  }
+
+  // Adjust license timing (countdown)
+  async adjustLicenseTiming(req: Request, res: Response) {
+    try {
+      const { licenseId } = req.params;
+      const { totalMinutes, reason } = req.body;
+      const adminId = req.user?.id;
+
+      if (!adminId) {
+        return res.status(401).json({
+          success: false,
+          error: 'Admin authentication required'
+        });
+      }
+
+      if (!licenseId) {
+        return res.status(400).json({
+          success: false,
+          error: 'License ID is required'
+        });
+      }
+
+      if (typeof totalMinutes !== 'number') {
+        return res.status(400).json({
+          success: false,
+          error: 'Total minutes must be a valid number'
+        });
+      }
+
+      // Limit adjustment to ±24 hours (1440 minutes)
+      if (Math.abs(totalMinutes) > 1440) {
+        return res.status(400).json({
+          success: false,
+          error: 'Adjustment cannot exceed ±24 hours'
+        });
+      }
+
+      if (!reason || typeof reason !== 'string' || reason.trim().length === 0) {
+        return res.status(400).json({
+          success: false,
+          error: 'Reason is required'
+        });
+      }
+
+      const result = await adminService.adjustLicenseTiming(licenseId, totalMinutes, reason.trim(), adminId);
+
+      if (!result) {
+        return res.status(404).json({
+          success: false,
+          error: 'License not found'
+        });
+      }
+
+      return res.json({
+        success: true,
+        message: 'License timing adjusted successfully',
+        data: result
+      });
+    } catch (error) {
+      logger.error(`Error adjusting license timing: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      return res.status(500).json({
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to adjust license timing'
+      });
+    }
+  }
+
+  // Process earnings for a specific license
+  async processLicenseEarnings(req: Request, res: Response) {
+    try {
+      const { licenseId } = req.params;
+      const { force } = req.body;
+      const adminId = req.user?.id;
+
+      if (!adminId) {
+        return res.status(401).json({
+          success: false,
+          error: 'Admin authentication required'
+        });
+      }
+
+      if (!licenseId) {
+        return res.status(400).json({
+          success: false,
+          error: 'License ID is required'
+        });
+      }
+
+      const result = await adminService.processLicenseEarnings(licenseId, force || false, adminId);
+
+      if (!result) {
+        return res.status(404).json({
+          success: false,
+          error: 'License not found'
+        });
+      }
+
+      return res.json({
+        success: true,
+        message: 'License earnings processed successfully',
+        data: result
+      });
+    } catch (error) {
+      logger.error(`Error processing license earnings: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      return res.status(500).json({
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to process license earnings'
       });
     }
   }

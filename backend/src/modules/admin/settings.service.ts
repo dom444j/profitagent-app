@@ -5,7 +5,6 @@ const prisma = new PrismaClient();
 
 interface SystemSettings {
   min_withdrawal_amount: number;
-  withdrawal_fee_usdt: number;
   daily_earning_rate: number;
   max_earning_days: number;
   earning_cap_percentage: number;
@@ -15,6 +14,8 @@ interface SystemSettings {
   withdrawal_enabled: boolean;
   maximum_withdrawal: number;
   password_min_length: number;
+  automatic_order_processing: boolean;
+  automatic_daily_earnings_processing: boolean;
 }
 
 interface SecuritySettings {
@@ -41,16 +42,17 @@ class AdminSettingsService {
   private defaultSettings: AdminSettings = {
     system: {
       min_withdrawal_amount: 10.0,
-      withdrawal_fee_usdt: 2.0,
-      daily_earning_rate: 0.1,
-      max_earning_days: 20,
+      daily_earning_rate: 0.08,
+      max_earning_days: 25,
       earning_cap_percentage: 2.0,
       referral_commission_rate: 0.1,
       maintenance_mode: false,
       registration_enabled: true,
       withdrawal_enabled: true,
       maximum_withdrawal: 50000.0,
-      password_min_length: 8
+      password_min_length: 8,
+      automatic_order_processing: false,
+      automatic_daily_earnings_processing: true
     },
     security: {
       require_2fa: false,

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { DollarSign, Clock, CheckCircle, XCircle, Send, AlertCircle } from 'lucide-react';
+import { DollarSign, Clock, CheckCircle, XCircle, AlertCircle } from 'lucide-react';
 import Layout from '../../components/layout/Layout';
 import Card from '../../components/ui/Card';
 import Button from '../../components/ui/Button';
@@ -17,10 +17,16 @@ interface UserBalance {
   pending_commissions: string;
 }
 
+interface UserProfile {
+  withdrawal_wallet_address?: string;
+  withdrawal_wallet_verified?: boolean;
+}
+
 const UserWithdrawalsPage: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'new' | 'history'>('new');
   const [withdrawals, setWithdrawals] = useState<Withdrawal[]>([]);
   const [balance, setBalance] = useState<UserBalance | null>(null);
+  const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -28,15 +34,8 @@ const UserWithdrawalsPage: React.FC = () => {
   
   // Form state
   const [amount, setAmount] = useState('');
-  const [payoutAddress, setPayoutAddress] = useState('');
   const [amountError, setAmountError] = useState<string | null>(null);
   
-  // OTP Modal state
-  const [showOtpModal, setShowOtpModal] = useState(false);
-  const [otpCode, setOtpCode] = useState('');
-  const [pendingWithdrawal, setPendingWithdrawal] = useState<any>(null);
-  const [otpSubmitting, setOtpSubmitting] = useState(false);
-  const [withdrawalFee, setWithdrawalFee] = useState(2);
   const [minWithdrawal, setMinWithdrawal] = useState(10);
 
   useEffect(() => {
@@ -46,11 +45,7 @@ const UserWithdrawalsPage: React.FC = () => {
 
   const loadSystemConfig = async () => {
     try {
-      const [fee, minAmount] = await Promise.all([
-        systemConfigService.getWithdrawalFee(),
-        systemConfigService.getMinWithdrawal()
-      ]);
-      setWithdrawalFee(fee);
+      const minAmount = await systemConfigService.getMinWithdrawal();
       setMinWithdrawal(minAmount);
     } catch (error) {
       console.error('Error loading system config:', error);
@@ -61,12 +56,14 @@ const UserWithdrawalsPage: React.FC = () => {
   const fetchData = async () => {
     try {
       setLoading(true);
-      const [withdrawalsData, balanceData] = await Promise.all([
+      const [withdrawalsData, balanceData, profileData] = await Promise.all([
         apiService.getUserWithdrawals(),
-        apiService.getUserBalance()
+        apiService.getUserBalance(),
+        apiService.getUserProfile()
       ]);
       setWithdrawals(withdrawalsData || []);
       setBalance(balanceData.data);
+      setProfile(profileData.data);
     } catch (err) {
       setError('Error al cargar los datos');
       console.error('Error fetching data:', err);
@@ -83,7 +80,6 @@ const UserWithdrawalsPage: React.FC = () => {
 
     const amountNum = parseFloat(value);
     const availableNum = parseFloat(balance?.available || '0');
-    const totalRequired = amountNum + withdrawalFee;
 
     if (isNaN(amountNum) || amountNum <= 0) {
       setAmountError('El monto debe ser mayor a 0');
@@ -95,8 +91,8 @@ const UserWithdrawalsPage: React.FC = () => {
       return;
     }
 
-    if (totalRequired > availableNum) {
-      setAmountError(`Saldo insuficiente. Necesitas $${totalRequired.toFixed(2)} USDT (incluyendo $${withdrawalFee.toFixed(2)} USDT de fee)`);
+    if (amountNum > availableNum) {
+      setAmountError(`Saldo insuficiente. Disponible: $${availableNum.toFixed(2)} USDT`);
       return;
     }
 
@@ -111,22 +107,26 @@ const UserWithdrawalsPage: React.FC = () => {
 
   const handleSubmitWithdrawal = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!amount || !payoutAddress) {
-      setError('Por favor completa todos los campos');
+    if (!amount) {
+      setError('Por favor ingresa un monto');
+      return;
+    }
+
+    if (!profile?.withdrawal_wallet_address || !profile?.withdrawal_wallet_verified) {
+      setError('Debes tener una wallet de retiro verificada en tu perfil');
       return;
     }
 
     const amountNum = parseFloat(amount);
     const availableNum = parseFloat(balance?.available || '0');
-    const totalRequired = amountNum + withdrawalFee;
     
     if (amountNum <= 0) {
       setError('El monto debe ser mayor a 0');
       return;
     }
 
-    if (totalRequired > availableNum) {
-      setError(`Monto insuficiente. Necesitas $${totalRequired.toFixed(2)} USDT (incluyendo $${withdrawalFee.toFixed(2)} USDT de fee por gas agent)`);
+    if (amountNum > availableNum) {
+      setError(`Saldo insuficiente. Disponible: $${availableNum.toFixed(2)} USDT`);
       return;
     }
 
@@ -139,15 +139,15 @@ const UserWithdrawalsPage: React.FC = () => {
       setSubmitting(true);
       setError(null);
       
-      const response = await apiService.createWithdrawal({
+      await apiService.createWithdrawal({
         amount_usdt: amountNum,
-        payout_address: payoutAddress
+        payout_address: profile.withdrawal_wallet_address
       });
       
-      // Store withdrawal data and show OTP modal
-      setPendingWithdrawal(response.data);
-      setShowOtpModal(true);
-      setSuccess('OTP enviado a tu Telegram. Por favor ingresa el código.');
+      setSuccess('Retiro solicitado exitosamente. Será procesado por el administrador.');
+      setAmount('');
+      setActiveTab('history');
+      fetchData();
       
     } catch (err: any) {
       setError(err.response?.data?.message || 'Error al procesar el retiro');
@@ -156,64 +156,11 @@ const UserWithdrawalsPage: React.FC = () => {
     }
   };
 
-  const handleConfirmOtp = async () => {
-    if (!otpCode || otpCode.length !== 6) {
-      setError('Por favor ingresa un código OTP válido de 6 dígitos');
-      return;
-    }
 
-    try {
-      setOtpSubmitting(true);
-      setError(null);
-      
-      await apiService.confirmWithdrawalOtp(pendingWithdrawal.id, otpCode, pendingWithdrawal.otp_id);
-      
-      // Éxito: cerrar modal y limpiar estado
-      setSuccess('Retiro confirmado exitosamente. Será procesado por el administrador.');
-      setShowOtpModal(false);
-      setOtpCode('');
-      setAmount('');
-      setPayoutAddress('');
-      setPendingWithdrawal(null);
-      setActiveTab('history');
-      fetchData();
-    } catch (err: any) {
-      // Error: mostrar mensaje pero mantener modal abierto para reintentos
-      const errorMessage = err.response?.data?.error || err.response?.data?.message || 'Código OTP inválido';
-      setError(errorMessage);
-      
-      // Si el error es por OTP expirado o inválido, limpiar el código para permitir reintento
-      if (errorMessage.includes('expired') || errorMessage.includes('Invalid')) {
-        setOtpCode('');
-      }
-    } finally {
-      setOtpSubmitting(false);
-    }
-  };
-
-  const handleCloseOtpModal = async () => {
-    if (pendingWithdrawal) {
-      try {
-        // Cancel the withdrawal when closing the modal
-        await apiService.cancelWithdrawal(pendingWithdrawal.id);
-        setSuccess('Retiro cancelado exitosamente');
-        // Refresh data to update balance and withdrawals list
-        await fetchData();
-      } catch (error: any) {
-        console.error('Error canceling withdrawal:', error);
-        // Don't show error to user as this is a background operation
-      }
-    }
-    setShowOtpModal(false);
-    setOtpCode('');
-    setPendingWithdrawal(null);
-  };
 
   const getStatusBadge = (status: string) => {
     const statusConfig = {
       requested: { color: 'yellow' as const, icon: Clock, text: 'Solicitado' },
-      otp_sent: { color: 'blue' as const, icon: Send, text: 'OTP Enviado' },
-      otp_verified: { color: 'blue' as const, icon: CheckCircle, text: 'OTP Verificado' },
       approved: { color: 'green' as const, icon: CheckCircle, text: 'Aprobado' },
       paid: { color: 'green' as const, icon: CheckCircle, text: 'Pagado' },
       rejected: { color: 'red' as const, icon: XCircle, text: 'Rechazado' },
@@ -385,22 +332,10 @@ const UserWithdrawalsPage: React.FC = () => {
                   required
                 />
                 {amount && parseFloat(amount) > 0 && (
-                  <div className="mt-2 p-3 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg">
-                    <div className="text-sm text-yellow-800 dark:text-yellow-200">
-                      <div className="flex justify-between">
-                        <span>Monto solicitado:</span>
-                        <span>${parseFloat(amount).toFixed(2)} USDT</span>
-                      </div>
-                      <div className="flex justify-between">
-                         <span>Fee por gas agent:</span>
-                         <span>${withdrawalFee.toFixed(2)} USDT</span>
-                       </div>
-                      <div className="flex justify-between border-t border-yellow-200 dark:border-yellow-700 pt-1 mt-1 font-medium">
-                        <span>Total a descontar:</span>
-                        <span>${(parseFloat(amount) + withdrawalFee).toFixed(2)} USDT</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span>Recibirás:</span>
+                  <div className="mt-2 p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
+                    <div className="text-sm text-blue-800 dark:text-blue-200">
+                      <div className="flex justify-between font-medium">
+                        <span>Monto a retirar:</span>
                         <span>${parseFloat(amount).toFixed(2)} USDT</span>
                       </div>
                     </div>
@@ -423,31 +358,54 @@ const UserWithdrawalsPage: React.FC = () => {
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                   Dirección de Pago (USDT)
                 </label>
-                <input
-                  type="text"
-                  value={payoutAddress}
-                  onChange={(e) => setPayoutAddress(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white"
-                  placeholder="0x..."
-                  required
-                />
-                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                  Dirección de wallet para recibir USDT
-                </p>
+                {profile?.withdrawal_wallet_address && profile?.withdrawal_wallet_verified ? (
+                  <div className="space-y-2">
+                    <div className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg">
+                      <code className="text-sm font-mono text-gray-900 dark:text-white break-all">
+                        {profile.withdrawal_wallet_address}
+                      </code>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <CheckCircle className="w-4 h-4 text-green-600" />
+                      <span className="text-xs text-green-600 font-medium">
+                        Wallet verificada y vinculada
+                      </span>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <div className="w-full px-3 py-2 bg-red-50 dark:bg-red-900/20 border border-red-300 dark:border-red-600 rounded-lg">
+                      <p className="text-sm text-red-700 dark:text-red-400 font-medium">
+                        No tienes una wallet de retiro vinculada
+                      </p>
+                    </div>
+                    <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-3">
+                      <div className="flex items-start gap-2">
+                        <AlertCircle className="w-4 h-4 text-red-600 dark:text-red-400 mt-0.5" />
+                        <div className="text-sm text-red-700 dark:text-red-300">
+                          <p className="font-medium mb-1">Acción requerida:</p>
+                          <p className="text-xs">
+                            Debes vincular y verificar una wallet de retiro en tu perfil antes de poder solicitar retiros.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
               
-              <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-4">
+              <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
                 <div className="flex items-start gap-2">
-                  <AlertCircle className="w-4 h-4 text-yellow-600 dark:text-yellow-400 mt-0.5" />
-                  <div className="text-sm text-yellow-700 dark:text-yellow-300">
+                  <AlertCircle className="w-4 h-4 text-blue-600 dark:text-blue-400 mt-0.5" />
+                  <div className="text-sm text-blue-700 dark:text-blue-300">
                     <p className="font-medium mb-1">Información importante:</p>
                     <ul className="list-disc list-inside space-y-1 text-xs">
                       <li>Monto mínimo: ${minWithdrawal} USDT</li>
-                      <li>Se aplicará un fee de ${withdrawalFee.toFixed(2)} USDT por gas agent en cada retiro</li>
-                      <li>Los retiros requieren confirmación por OTP de Telegram</li>
                       <li>Los retiros requieren aprobación del administrador</li>
+                      <li>Debes tener una wallet de retiro verificada en tu perfil</li>
                       <li>Verifica que la dirección sea correcta, no se puede cambiar después</li>
                       <li>El procesamiento puede tomar de 15 min - 48 horas</li>
+                      <li>Solo se aplicará el fee de red BEP20 (externo al sistema)</li>
                     </ul>
                   </div>
                 </div>
@@ -455,7 +413,7 @@ const UserWithdrawalsPage: React.FC = () => {
               
               <Button
                 type="submit"
-                disabled={submitting || !amount || !payoutAddress || !!amountError}
+                disabled={submitting || !amount || !!amountError || !profile?.withdrawal_wallet_address || !profile?.withdrawal_wallet_verified}
                 className="w-full"
               >
                 {submitting ? (
@@ -526,78 +484,7 @@ const UserWithdrawalsPage: React.FC = () => {
         )}
       </div>
 
-      {/* OTP Modal */}
-      {showOtpModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white dark:bg-gray-800 rounded-lg p-6 w-full max-w-md mx-4">
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-              Confirmar Retiro con OTP
-            </h3>
-            
-            {pendingWithdrawal?.fee_info && (
-              <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4 mb-4">
-                <h4 className="font-medium text-blue-900 dark:text-blue-100 mb-2">Resumen del Retiro:</h4>
-                <div className="space-y-1 text-sm text-blue-800 dark:text-blue-200">
-                  <div className="flex justify-between">
-                    <span>Monto solicitado:</span>
-                    <span>${pendingWithdrawal.fee_info.requested_amount} USDT</span>
-                  </div>
-                  <div className="flex justify-between">
-                     <span>Fee por gas agent:</span>
-                     <span>${pendingWithdrawal.fee_info.gas_fee} USDT</span>
-                   </div>
-                  <div className="flex justify-between border-t border-blue-200 dark:border-blue-700 pt-1 font-medium">
-                    <span>Total a descontar:</span>
-                    <span>${pendingWithdrawal.fee_info.total_deducted} USDT</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Recibirás:</span>
-                    <span>${pendingWithdrawal.fee_info.net_amount} USDT</span>
-                  </div>
-                </div>
-              </div>
-            )}
-            
-            <p className="text-gray-600 dark:text-gray-400 mb-4">
-              Ingresa el código de 6 dígitos que recibiste en Telegram:
-            </p>
-            
-            <input
-              type="text"
-              value={otpCode}
-              onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
-              placeholder="000000"
-              className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white text-center text-lg tracking-widest"
-              maxLength={6}
-            />
-            
-            <div className="flex gap-3 mt-6">
-              <Button
-                variant="outline"
-                onClick={handleCloseOtpModal}
-                disabled={otpSubmitting}
-                className="flex-1"
-              >
-                Cancelar
-              </Button>
-              <Button
-                onClick={handleConfirmOtp}
-                disabled={otpSubmitting || otpCode.length !== 6}
-                className="flex-1"
-              >
-                {otpSubmitting ? (
-                  <>
-                    <LoadingSpinner size="sm" className="mr-2" />
-                    Confirmando...
-                  </>
-                ) : (
-                  'Confirmar'
-                )}
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
+
     </Layout>
   );
 };

@@ -1,8 +1,9 @@
 {
-  "name": "frontend",
+  "name": "profitagent-frontend",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.0.0",
   "type": "module",
+  "description": "ProFitAgent - Frontend application for investment management platform",
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",

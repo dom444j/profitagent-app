@@ -33,6 +33,7 @@ const AdminLicensesPage: React.FC = () => {
   const [success, setSuccess] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
+  const [totalLicenses, setTotalLicenses] = useState(0);
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'completed' | 'paused' | 'canceled'>('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedLicense, setSelectedLicense] = useState<AdminLicense | null>(null);
@@ -42,10 +43,11 @@ const AdminLicensesPage: React.FC = () => {
   const [adjustDaysForm, setAdjustDaysForm] = useState({ days: 0, reason: '' });
   const [adjustTimingForm, setAdjustTimingForm] = useState({ hours: 0, minutes: 0, reason: '' });
   const [showProcessEarningsModal, setShowProcessEarningsModal] = useState(false);
+  const [pageSize, setPageSize] = useState(50); // Increased default page size
 
   useEffect(() => {
     fetchLicenses(currentPage, searchTerm, statusFilter);
-  }, [currentPage, statusFilter]);
+  }, [currentPage, statusFilter, pageSize]);
 
   useEffect(() => {
     // Auto-refresh every 30 seconds
@@ -53,20 +55,30 @@ const AdminLicensesPage: React.FC = () => {
       fetchLicenses(currentPage, searchTerm, statusFilter);
     }, 30000);
     return () => clearInterval(interval);
-  }, [currentPage, searchTerm, statusFilter]);
+  }, [currentPage, searchTerm, statusFilter, pageSize]);
+
+  // Force re-render every second to update production times
+  const [, forceUpdate] = useState({});
+  useEffect(() => {
+    const interval = setInterval(() => {
+      forceUpdate({});
+    }, 1000);
+    return () => clearInterval(interval);
+  }, []);
 
   const fetchLicenses = async (page: number = 1, search: string = '', status: string = 'all') => {
     try {
       setLoading(true);
       const response: LicensesResponse = await apiService.getAdminLicenses(
         page,
-        20,
+        pageSize,
         status === 'all' ? undefined : status,
         search || undefined
       );
       
       setLicenses(response.licenses || []);
       setTotalPages(response.totalPages || 1);
+      setTotalLicenses(response.total || 0);
       setError(null);
     } catch (err: any) {
       setError('Error al cargar licencias');
@@ -205,13 +217,65 @@ const AdminLicensesPage: React.FC = () => {
     return cap > 0 ? Math.min((accruedNum / cap) * 100, 100) : 0;
   };
 
-  const calculateDaysRemaining = (daysGenerated: number, totalDays: number = 20) => {
+  const calculateDaysRemaining = (daysGenerated: number, totalDays: number = 25) => {
     const validDaysGenerated = daysGenerated || 0;
     return Math.max(totalDays - validDaysGenerated, 0);
   };
 
+  // Calculate production time (time since license started)
+  const calculateProductionTime = (startedAt: string | undefined) => {
+    if (!startedAt) return { hours: 0, minutes: 0, totalHours: 0 };
+    
+    const now = new Date();
+    const started = new Date(startedAt);
+    const diffMs = now.getTime() - started.getTime();
+    
+    if (diffMs < 0) return { hours: 0, minutes: 0, totalHours: 0 };
+    
+    const totalHours = Math.floor(diffMs / (1000 * 60 * 60));
+    const hours = totalHours % 24;
+    const minutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+    
+    return { hours, minutes, totalHours };
+  };
+
+  // Calculate daily production time (current 24h cycle)
+  const calculateDailyProductionTime = (startedAt: string | undefined) => {
+    if (!startedAt) return { hours: 0, minutes: 0, percentage: 0 };
+    
+    const now = new Date();
+    const started = new Date(startedAt);
+    const timeSinceStart = now.getTime() - started.getTime();
+    
+    if (timeSinceStart < 0) return { hours: 0, minutes: 0, percentage: 0 };
+    
+    const dayInMs = 24 * 60 * 60 * 1000;
+    const timeInCurrentDay = timeSinceStart % dayInMs;
+    const validTimeInDay = Math.max(0, timeInCurrentDay);
+    
+    const hours = Math.floor(validTimeInDay / (60 * 60 * 1000));
+    const minutes = Math.floor((validTimeInDay % (60 * 60 * 1000)) / (60 * 1000));
+    const percentage = Math.min((validTimeInDay / dayInMs) * 100, 100);
+    
+    return { hours, minutes, percentage };
+  };
+
+  // Format time display
+  const formatTimeDisplay = (hours: number, minutes: number) => {
+    return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+  };
+
+  // Format total hours display
+  const formatTotalHours = (totalHours: number) => {
+    if (totalHours < 24) {
+      return `${totalHours}h`;
+    }
+    const days = Math.floor(totalHours / 24);
+    const remainingHours = totalHours % 24;
+    return `${days}d ${remainingHours}h`;
+  };
+
   // Calculate summary stats
-  const totalLicenses = licenses.length;
   const activeLicenses = licenses.filter(l => l.status === 'active').length;
   const pausedLicenses = licenses.filter(l => l.flags?.pause_potential || l.pause_potential).length;
   const totalInvested = licenses.reduce((sum, l) => {
@@ -220,6 +284,16 @@ const AdminLicensesPage: React.FC = () => {
     return sum + parseFloat(principal);
   }, 0);
   const totalEarned = licenses.reduce((sum, l) => sum + parseFloat(l.accruedUSDT || l.accrued_usdt || '0'), 0);
+  
+  // Calculate total production time for active licenses
+  const totalProductionHours = licenses
+    .filter(l => l.status === 'active')
+    .reduce((sum, l) => {
+      const startedAt = l.startedAt || l.started_at;
+      if (!startedAt) return sum;
+      const productionTime = calculateProductionTime(startedAt);
+      return sum + productionTime.totalHours;
+    }, 0);
 
   if (loading && licenses.length === 0) {
     return (
@@ -246,7 +320,7 @@ const AdminLicensesPage: React.FC = () => {
         </div>
 
         {/* Summary Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4">
           <Card className="p-4">
             <div className="flex items-center justify-between">
               <div>
@@ -306,6 +380,18 @@ const AdminLicensesPage: React.FC = () => {
               </div>
             </div>
           </Card>
+
+          <Card className="p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-600">Tiempo Producción</p>
+                <p className="text-2xl font-bold text-purple-600">{formatTotalHours(totalProductionHours)}</p>
+              </div>
+              <div className="p-3 bg-purple-100 rounded-lg">
+                <Clock className="h-6 w-6 text-purple-600" />
+              </div>
+            </div>
+          </Card>
         </div>
 
         {/* Filters and Search */}
@@ -336,6 +422,19 @@ const AdminLicensesPage: React.FC = () => {
                 <option value="completed">Completadas</option>
                 <option value="paused">Pausadas</option>
                 <option value="canceled">Canceladas</option>
+              </select>
+              
+              <select
+                value={pageSize}
+                onChange={(e) => {
+                  setPageSize(Number(e.target.value));
+                  setCurrentPage(1);
+                }}
+                className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              >
+                <option value={20}>20 por página</option>
+                <option value={50}>50 por página</option>
+                <option value={100}>100 por página</option>
               </select>
               
               <Button onClick={handleSearch} className="px-4 py-2">
@@ -384,6 +483,12 @@ const AdminLicensesPage: React.FC = () => {
                     Días
                   </th>
                   <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden xl:table-cell">
+                    Tiempo Total
+                  </th>
+                  <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden xl:table-cell">
+                    Tiempo Diario
+                  </th>
+                  <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden 2xl:table-cell">
                     Resultados
                   </th>
                   <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden 2xl:table-cell">
@@ -399,6 +504,11 @@ const AdminLicensesPage: React.FC = () => {
                   const progress = calculateProgress(license.accruedUSDT || license.accrued_usdt || '0', license.principalUSDT || license.principal_usdt || '0');
                   const daysGenerated = license.daysGenerated || license.days_generated || 0;
                   const isPotentialPaused = license.flags?.pause_potential || license.pause_potential || false;
+                  
+                  // Calculate production times
+                  const startedAt = license.startedAt || license.started_at;
+                  const productionTime = calculateProductionTime(startedAt);
+                  const dailyProductionTime = calculateDailyProductionTime(startedAt);
                   
                   return (
                     <tr key={license.id} className="hover:bg-gray-50">
@@ -458,7 +568,7 @@ const AdminLicensesPage: React.FC = () => {
                       
                       <td className="px-3 sm:px-6 py-4 whitespace-nowrap hidden lg:table-cell">
                         <div className="text-sm text-gray-900">
-                          {daysGenerated}/20
+                          {daysGenerated}/25
                         </div>
                         <div className="text-xs text-gray-500">
                           {calculateDaysRemaining(daysGenerated)} restantes
@@ -466,6 +576,30 @@ const AdminLicensesPage: React.FC = () => {
                       </td>
                       
                       <td className="px-3 sm:px-6 py-4 whitespace-nowrap hidden xl:table-cell">
+                        <div className="text-sm text-gray-900">
+                          {formatTotalHours(productionTime.totalHours)}
+                        </div>
+                        <div className="text-xs text-gray-500">
+                          Tiempo acumulado
+                        </div>
+                      </td>
+                      
+                      <td className="px-3 sm:px-6 py-4 whitespace-nowrap hidden xl:table-cell">
+                        <div className="text-sm text-gray-900">
+                          {formatTimeDisplay(dailyProductionTime.hours, dailyProductionTime.minutes)}
+                        </div>
+                        <div className="w-full bg-gray-200 rounded-full h-1 mt-1">
+                          <div 
+                            className="bg-blue-500 h-1 rounded-full transition-all duration-300"
+                            style={{ width: `${dailyProductionTime.percentage}%` }}
+                          ></div>
+                        </div>
+                        <div className="text-xs text-gray-500 mt-1">
+                          {dailyProductionTime.percentage.toFixed(1)}% del día
+                        </div>
+                      </td>
+                      
+                      <td className="px-3 sm:px-6 py-4 whitespace-nowrap hidden 2xl:table-cell">
                         <div className="text-sm text-gray-900">
                           {formatUSDTDisplay(license.accruedUSDT || license.accrued_usdt || '0')}
                         </div>
@@ -564,27 +698,29 @@ const AdminLicensesPage: React.FC = () => {
         </Card>
 
         {/* Pagination */}
-        {totalPages > 1 && (
+        {totalLicenses > 0 && (
           <div className="flex items-center justify-between">
             <div className="text-sm text-gray-700">
-              Página {currentPage} de {totalPages}
+              Mostrando {((currentPage - 1) * pageSize) + 1} - {Math.min(currentPage * pageSize, totalLicenses)} de {totalLicenses} licencias {totalPages > 1 && `(Página ${currentPage} de ${totalPages})`}
             </div>
-            <div className="flex space-x-2">
-              <Button
-                variant="outline"
-                onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
-                disabled={currentPage === 1}
-              >
-                Anterior
-              </Button>
-              <Button
-                variant="outline"
-                onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
-                disabled={currentPage === totalPages}
-              >
-                Siguiente
-              </Button>
-            </div>
+            {totalPages > 1 && (
+              <div className="flex space-x-2">
+                <Button
+                  variant="outline"
+                  onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                  disabled={currentPage === 1}
+                >
+                  Anterior
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                  disabled={currentPage === totalPages}
+                >
+                  Siguiente
+                </Button>
+              </div>
+            )}
           </div>
         )}
 
@@ -725,12 +861,12 @@ const AdminLicensesPage: React.FC = () => {
                 <div className="space-y-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Nuevos días (0-20)
+                      Nuevos días (0-25)
                     </label>
                     <input
                       type="number"
                       min="0"
-                      max="20"
+                      max="25"
                       value={adjustDaysForm.days}
                       onChange={(e) => setAdjustDaysForm(prev => ({ ...prev, days: parseInt(e.target.value) || 0 }))}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -811,7 +947,7 @@ const AdminLicensesPage: React.FC = () => {
                   <div className="text-sm text-gray-600">{selectedLicense.user.email}</div>
                   <div className="text-sm text-gray-600">{selectedLicense.product.name}</div>
                   <div className="text-sm text-gray-600">{formatUSDTDisplay(selectedLicense.principalUSDT || selectedLicense.principal_usdt || '0')}</div>
-                  <div className="text-sm text-gray-600">Días generados: {selectedLicense.daysGenerated || selectedLicense.days_generated || 0}/20</div>
+                  <div className="text-sm text-gray-600">Días generados: {selectedLicense.daysGenerated || selectedLicense.days_generated || 0}/25</div>
                 </div>
               </div>
 

@@ -43,4 +43,13 @@ router.post('/settings/change-password', userController.changePassword);
 // DELETE /api/v1/user/settings/delete-account - Delete account
 router.delete('/settings/delete-account', userController.deleteAccount);
 
+// GET /api/v1/user/telegram/health - Get Telegram service health
+router.get('/telegram/health', userController.getTelegramHealth);
+
+// POST /api/v1/user/withdrawal-wallet/verify - Verify withdrawal wallet with OTP
+router.post('/withdrawal-wallet/verify', userController.verifyWithdrawalWallet);
+
+// POST /api/v1/user/withdrawal-wallet/confirm - Confirm withdrawal wallet OTP
+router.post('/withdrawal-wallet/confirm', userController.confirmWithdrawalWalletOtp);
+
 export { router as userRoutes };

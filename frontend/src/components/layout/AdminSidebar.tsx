@@ -12,10 +12,11 @@ import {
   UserCheck,
   DollarSign,
   User,
-  Gift
+  Gift,
+  MessageCircle
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
-import Grow5xLogo from '../ui/Grow5xLogo';
+import ProFitAgentLogo from '../ui/ProFitAgentLogo';
 
 interface AdminSidebarProps {
   isOpen: boolean;
@@ -82,6 +83,12 @@ const AdminSidebar: React.FC<AdminSidebarProps> = ({ isOpen, onClose }) => {
       current: location.pathname === '/admin/bonuses'
     },
     {
+      name: 'Telegram',
+      href: '/admin/telegram',
+      icon: MessageCircle,
+      current: location.pathname === '/admin/telegram'
+    },
+    {
       name: 'Perfil',
       href: '/admin/profile',
       icon: User,
@@ -119,10 +126,10 @@ const AdminSidebar: React.FC<AdminSidebarProps> = ({ isOpen, onClose }) => {
             <div className="absolute inset-0 bg-gradient-to-r from-blue-600/20 to-indigo-600/20 animate-pulse"></div>
             <div className="relative flex items-center space-x-3">
               <div className="w-10 h-10 bg-white/20 backdrop-blur-sm rounded-xl flex items-center justify-center">
-                <Grow5xLogo size="md" variant="white" />
+                <ProFitAgentLogo size="md" variant="white" />
               </div>
               <div>
-                <h1 className="text-xl font-bold text-white">Grow5x</h1>
+                <h1 className="text-xl font-bold text-white">ProFitAgent</h1>
                 <p className="text-xs text-blue-100">Admin Panel</p>
               </div>
             </div>
@@ -140,8 +147,8 @@ const AdminSidebar: React.FC<AdminSidebarProps> = ({ isOpen, onClose }) => {
               </div>
               <div className="ml-4">
                 <p className="text-sm font-medium text-white">
-                  {user?.first_name && user?.last_name 
-                    ? `${user.first_name} ${user.last_name}`
+                  {user?.first_name && user?.last_name
+                ? `${user.first_name} ${user.last_name}`
                     : user?.email
                   }
                 </p>
@@ -216,3 +223,4 @@ const AdminSidebar: React.FC<AdminSidebarProps> = ({ isOpen, onClose }) => {
 };
 
 export default AdminSidebar;
+

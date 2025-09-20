@@ -3,7 +3,7 @@ import * as bcrypt from 'bcrypt';
 import * as jwt from 'jsonwebtoken';
 import { z } from 'zod';
 import { authService } from './service';
-import { DockerAuthService } from './docker-service';
+
 import { logger } from '../../utils/logger';
 import '../../lib/middleware';
 
@@ -59,7 +59,7 @@ class AuthController {
       res.cookie('auth_token', token, {
         httpOnly: true,
         secure: process.env.NODE_ENV === 'production',
-        sameSite: 'strict',
+        sameSite: process.env.NODE_ENV === 'production' ? 'strict' : 'lax',
         maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
       });
       
@@ -73,8 +73,10 @@ class AuthController {
           id: result.user.id,
           email: result.user.email,
           first_name: result.user.first_name,
-          last_name: result.user.last_name,
-          ref_code: result.user.ref_code
+        last_name: result.user.last_name,
+          ref_code: result.user.ref_code,
+          role: result.user.role,
+          status: result.user.status
         }
       });
     } catch (error) {
@@ -90,13 +92,7 @@ class AuthController {
     try {
       const validatedData = loginSchema.parse(req.body);
       
-      let result;
-      try {
-        const user = await DockerAuthService.login(validatedData.email, validatedData.password);
-        result = { success: true, user };
-      } catch (error) {
-        result = { success: false, error: 'Invalid credentials' };
-      }
+      const result = await authService.login(validatedData);
       
       if (!result.success) {
         return res.status(401).json({ error: result.error });
@@ -105,6 +101,54 @@ class AuthController {
       // Set JWT cookie
       if (!result.user) {
         return res.status(401).json({ error: 'Authentication failed' });
+      }
+      
+      const token = jwt.sign(
+        { userId: result.user.id },
+        process.env.JWT_SECRET!,
+        { expiresIn: '7d' }
+      );
+      
+      res.cookie('auth_token', token, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: process.env.NODE_ENV === 'production' ? 'strict' : 'lax',
+        maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
+      });
+      
+      return res.json({
+        user: {
+          id: result.user.id,
+          email: result.user.email,
+          first_name: result.user.first_name,
+        last_name: result.user.last_name,
+          ref_code: result.user.ref_code,
+          role: result.user.role,
+          status: result.user.status
+        }
+      });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: 'Validation error', details: error.issues });
+      }
+      logger.error(error, 'Login error');
+      return res.status(500).json({ error: 'Internal server error' });
+    }
+  }
+  
+  async adminLogin(req: Request, res: Response) {
+    try {
+      const validatedData = loginSchema.parse(req.body);
+      
+      const result = await authService.login(validatedData);
+      
+      if (!result.success) {
+        return res.status(401).json({ error: result.error });
+      }
+      
+      // Verificar que el usuario sea admin
+      if (!result.user || result.user.role !== 'admin') {
+        return res.status(403).json({ error: 'Access denied. Admin role required.' });
       }
       
       const token = jwt.sign(
@@ -126,14 +170,16 @@ class AuthController {
           email: result.user.email,
           first_name: result.user.first_name,
           last_name: result.user.last_name,
-          ref_code: result.user.ref_code
+          ref_code: result.user.ref_code,
+          role: result.user.role,
+          status: result.user.status
         }
       });
     } catch (error) {
       if (error instanceof z.ZodError) {
         return res.status(400).json({ error: 'Validation error', details: error.issues });
       }
-      logger.error(error, 'Login error');
+      logger.error(error, 'Admin login error');
       return res.status(500).json({ error: 'Internal server error' });
     }
   }
@@ -142,12 +188,12 @@ class AuthController {
     res.clearCookie('auth_token', {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
+      sameSite: process.env.NODE_ENV === 'production' ? 'strict' : 'lax',
     });
     res.clearCookie('refreshToken', {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
+      sameSite: process.env.NODE_ENV === 'production' ? 'strict' : 'lax',
     });
     return res.json({ message: 'Logged out successfully' });
   }
@@ -185,11 +231,11 @@ class AuthController {
       
       // In a real implementation, you would:
       // 1. Send a Telegram message to user.telegram_user_id
-      // 2. Include a link like: https://grow5x.app/reset-password?token=${resetToken}
+      // 2. Include a link like: https://profitagent.app/reset-password?token=${resetToken}
       // 3. The link would lead to a form where user can set new password
       
       return res.json({ 
-        message: 'Se han enviado las instrucciones de recuperación a tu Telegram.' 
+        message: 'Se han enviado las instrucciones de recuperaciÃ³n a tu Telegram.' 
       });
       
     } catch (error) {
@@ -209,7 +255,7 @@ class AuthController {
       }
 
       // Get complete user information from database
-      const completeUser = await DockerAuthService.getUserById(req.user.id);
+      const completeUser = await authService.getUserById(req.user.id);
       if (!completeUser) {
         return res.status(401).json({ error: 'User not found' });
       }
@@ -219,9 +265,10 @@ class AuthController {
           id: completeUser.id,
           email: completeUser.email,
           first_name: completeUser.first_name,
-          last_name: completeUser.last_name,
+        last_name: completeUser.last_name,
           ref_code: completeUser.ref_code,
           usdt_bep20_address: completeUser.usdt_bep20_address,
+          telegram_user_id: completeUser.telegram_user_id,
           telegram_link_status: completeUser.telegram_link_status,
           role: completeUser.role,
           status: completeUser.status
@@ -230,6 +277,48 @@ class AuthController {
     } catch (error) {
       logger.error(error, 'Me endpoint error');
       return res.status(401).json({ error: 'Invalid token' });
+    }
+  }
+
+  async sseToken(req: Request, res: Response) {
+    try {
+      // Only generate SSE tokens if SSE_AUTH_MODE is set to 'token'
+      if (process.env.SSE_AUTH_MODE !== 'token') {
+        return res.status(400).json({ error: 'SSE token authentication is disabled' });
+      }
+
+      if (!req.user) {
+        return res.status(401).json({ error: 'Authentication required' });
+      }
+
+      // Generate short-lived JWT token for SSE
+      const ttl = Number(process.env.SSE_JWT_TTL_SECONDS || 900); // 15 minutes default
+      const sseSecret = process.env.SSE_JWT_SECRET || process.env.JWT_SECRET!;
+      
+      const token = jwt.sign(
+        { 
+          uid: req.user.id, 
+          role: req.user.role, 
+          type: 'sse' 
+        },
+        sseSecret,
+        { 
+          expiresIn: ttl, 
+          audience: 'sse', 
+          subject: req.user.id 
+        }
+      );
+
+      const expiresAt = Math.floor(Date.now() / 1000) + ttl;
+
+      return res.json({ 
+        token, 
+        exp: expiresAt,
+        ttl: ttl
+      });
+    } catch (error) {
+      logger.error(error, 'SSE token generation error');
+      return res.status(500).json({ error: 'Failed to generate SSE token' });
     }
   }
 }

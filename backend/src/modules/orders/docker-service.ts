@@ -22,7 +22,7 @@ export class DockerOrderService {
         finalQuery = finalQuery.replace(`$${index + 1}`, param);
       });
       
-      const command = `docker exec grow5x_pg psql -U grow5x -d grow5x -t -c "${finalQuery}"`;
+      const command = `docker exec profitagent_pg psql -U profitagent -d profitagent -t -c "${finalQuery}"`;
       const { stdout, stderr } = await execAsync(command);
       
       if (stderr && !stderr.includes('NOTICE')) {
@@ -85,7 +85,7 @@ export class DockerOrderService {
       const orderId = `order_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
       const expirationMinutes = await settingsService.getOrderExpirationMinutes();
       const expiresAt = new Date(Date.now() + expirationMinutes * 60 * 1000); // configurable minutes from now
-      logger.info('📝 Generated orderId:', orderId, 'expiresAt:', expiresAt);
+      logger.info('🔍 Generated orderId:', orderId, 'expiresAt:', expiresAt);
       
       logger.info('💾 Executing INSERT query...');
       await this.executeSQL(

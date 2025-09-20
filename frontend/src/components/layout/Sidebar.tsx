@@ -9,10 +9,11 @@ import {
   LogOut,
   User,
   CreditCard,
-  Users
+  Users,
+  MessageCircle
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
-import Grow5xLogo from '../ui/Grow5xLogo';
+import ProFitAgentLogo from '../ui/ProFitAgentLogo';
 
 interface SidebarProps {
   isOpen: boolean;
@@ -65,6 +66,12 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
       href: '/user/referrals',
       icon: Users,
       current: location.pathname === '/user/referrals'
+    },
+    {
+      name: 'Contacto',
+      href: '/user/contact',
+      icon: MessageCircle,
+      current: location.pathname === '/user/contact'
     }
   ];
 
@@ -88,30 +95,30 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
       
       {/* Sidebar */}
       <div className={`
-        fixed inset-y-0 left-0 z-30 w-64 bg-gradient-to-b from-slate-900 via-slate-800 to-slate-900 shadow-2xl transform transition-transform duration-300 ease-in-out
+        fixed inset-y-0 left-0 z-30 w-64 bg-gradient-to-b from-gray-900 via-slate-900 to-gray-900 shadow-2xl transform transition-transform duration-300 ease-in-out border-r border-gray-700/50
         lg:translate-x-0 lg:relative lg:inset-auto lg:h-screen
         ${isOpen ? 'translate-x-0' : '-translate-x-full'}
       `}>
         <div className="flex flex-col h-full">
           {/* Logo */}
-          <div className="flex items-center justify-center h-20 px-6 bg-gradient-to-r from-emerald-600 to-teal-600 relative overflow-hidden">
-            <div className="absolute inset-0 bg-gradient-to-r from-emerald-600/20 to-teal-600/20 animate-pulse"></div>
+          <div className="flex items-center px-6 py-6 bg-gradient-to-r from-slate-900 to-gray-900 relative overflow-hidden flex-shrink-0">
+            <div className="absolute inset-0 bg-gradient-to-r from-slate-800/30 to-gray-800/30"></div>
             <div className="relative flex items-center space-x-3">
-              <div className="w-10 h-10 bg-white/20 backdrop-blur-sm rounded-xl flex items-center justify-center">
-                <Grow5xLogo size="md" variant="white" />
+              <div className="w-12 h-12 bg-gradient-to-br from-blue-500 via-indigo-500 to-purple-600 rounded-xl flex items-center justify-center shadow-lg border border-blue-400/30">
+                <ProFitAgentLogo size="lg" variant="white" className="text-white" />
               </div>
               <div>
-                <h1 className="text-xl font-bold text-white">Grow5x</h1>
-                <p className="text-xs text-emerald-100">Herramientas IA</p>
+                <h1 className="text-xl font-bold text-white">ProFitAgent</h1>
+                <p className="text-xs text-gray-300">AI Arbitrage Platform</p>
               </div>
             </div>
           </div>
 
           {/* User info */}
-          <div className="px-6 py-6 border-b border-slate-700/50">
+          <div className="px-6 py-6 border-b border-slate-700/50 flex-shrink-0">
             <div className="flex items-center">
               <div className="flex-shrink-0">
-                <div className="h-12 w-12 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 flex items-center justify-center shadow-lg">
+                <div className="h-12 w-12 rounded-xl bg-gradient-to-r from-blue-500 to-purple-500 flex items-center justify-center shadow-lg">
                   <span className="text-sm font-medium text-white">
                     {user?.first_name?.[0] || user?.email?.[0]?.toUpperCase() || 'U'}
                   </span>
@@ -119,8 +126,8 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
               </div>
               <div className="ml-4">
                 <p className="text-sm font-medium text-white">
-                  {user?.first_name && user?.last_name 
-                    ? `${user.first_name} ${user.last_name}`
+                  {user?.first_name && user?.last_name
+                ? `${user.first_name} ${user.last_name}`
                     : user?.email
                   }
                 </p>
@@ -131,51 +138,57 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
             </div>
           </div>
 
-          {/* Navigation */}
-          <nav className="flex-1 px-6 py-6 space-y-3">
-            {navigation.map((item) => {
-              const Icon = item.icon;
-              return (
-                <Link
-                  key={item.name}
-                  to={item.href}
-                  onClick={onClose}
-                  className={`
-                    group flex items-center px-4 py-3 text-sm font-medium rounded-xl transition-all duration-200
-                    ${
-                      item.current
-                        ? 'bg-gradient-to-r from-emerald-500/20 to-teal-500/20 text-emerald-400 border-r-4 border-emerald-400 shadow-lg backdrop-blur-sm'
-                        : 'text-slate-300 hover:bg-slate-700/50 hover:text-white hover:shadow-md'
-                    }
-                  `}
-                >
-                  <Icon className={`
-                    mr-3 h-5 w-5 transition-colors
-                    ${
-                      item.current
-                        ? 'text-emerald-400'
-                        : 'text-slate-400 group-hover:text-slate-200'
-                    }
-                  `} />
-                  {item.name}
-                </Link>
-              );
-            })}
-          </nav>
+          {/* Scrollable content area */}
+          <div className="flex-1 overflow-y-auto scrollbar-dark" style={{
+            scrollbarWidth: 'thin',
+            scrollbarColor: '#475569 #1e293b'
+          }}>
+            {/* Navigation */}
+            <nav className="px-6 py-6 space-y-3">
+              {navigation.map((item) => {
+                const Icon = item.icon;
+                return (
+                  <Link
+                    key={item.name}
+                    to={item.href}
+                    onClick={onClose}
+                    className={`
+                      group flex items-center px-4 py-3 text-sm font-medium rounded-xl transition-all duration-200
+                      ${
+                        item.current
+                          ? 'bg-gradient-to-r from-blue-500/20 to-purple-500/20 text-blue-400 border-r-4 border-blue-400 shadow-lg backdrop-blur-sm'
+                          : 'text-slate-300 hover:bg-blue-800/30 hover:text-white hover:shadow-md'
+                      }
+                    `}
+                  >
+                    <Icon className={`
+                      mr-3 h-5 w-5 transition-colors
+                      ${
+                        item.current
+                          ? 'text-blue-400'
+                          : 'text-slate-400 group-hover:text-slate-200'
+                      }
+                    `} />
+                    {item.name}
+                  </Link>
+                );
+              })}
+            </nav>
+          </div>
 
-          {/* Bottom actions */}
-          <div className="px-6 py-6 border-t border-slate-700/50 space-y-3">
+          {/* Bottom actions - Fixed at bottom */}
+          <div className="px-6 py-6 border-t border-slate-700/50 space-y-3 flex-shrink-0">
             <Link
               to="/user/settings"
               onClick={onClose}
               className={`group flex items-center px-4 py-3 text-sm font-medium rounded-xl transition-all duration-200 ${
                 location.pathname === '/user/settings'
-                  ? 'bg-gradient-to-r from-emerald-500/20 to-teal-500/20 text-emerald-400 border-r-4 border-emerald-400 shadow-lg backdrop-blur-sm'
-                  : 'text-slate-300 hover:bg-slate-700/50 hover:text-white hover:shadow-md'
+                  ? 'bg-gradient-to-r from-blue-500/20 to-purple-500/20 text-blue-400 border-r-4 border-blue-400 shadow-lg backdrop-blur-sm'
+                  : 'text-slate-300 hover:bg-blue-800/30 hover:text-white hover:shadow-md'
               }`}
             >
               <Settings className={`mr-3 h-5 w-5 ${
-                location.pathname === '/user/settings' ? 'text-emerald-400' : 'text-slate-400 group-hover:text-slate-200'
+                location.pathname === '/user/settings' ? 'text-blue-400' : 'text-slate-400 group-hover:text-slate-200'
               }`} />
               Settings
             </Link>
@@ -195,3 +208,4 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
 };
 
 export default Sidebar;
+

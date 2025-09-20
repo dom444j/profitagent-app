@@ -52,9 +52,10 @@ export class LicenseService {
     }
   }
   
-  // Get user licenses with all required fields for new motor 10% x 20 days
-  async getUserLicenses(userId: string, status?: string) {
+  // Get user licenses with all required fields for new motor 8% x 25 days
+  async getUserLicenses(userId: string, status?: string, page: number = 1, limit: number = 50) {
     try {
+      const skip = (page - 1) * limit;
       const whereClause: any = {
         user_id: userId
       };
@@ -63,27 +64,34 @@ export class LicenseService {
         whereClause.status = status.toLowerCase();
       }
 
-      const licenses = await prisma.userLicense.findMany({
-        where: whereClause,
-        include: {
-          product: {
-            select: {
-              id: true,
-              name: true,
-              price_usdt: true,
-              daily_rate: true,
-              duration_days: true,
-              description: true,
-              sla_hours: true,
-              badge: true,
-              target_user: true
+      const [licenses, total] = await Promise.all([
+        prisma.userLicense.findMany({
+          where: whereClause,
+          skip,
+          take: limit,
+          include: {
+            product: {
+              select: {
+                id: true,
+                name: true,
+                price_usdt: true,
+                daily_rate: true,
+                duration_days: true,
+                description: true,
+                sla_hours: true,
+                badge: true,
+                target_user: true
+              }
             }
+          },
+          orderBy: {
+            created_at: 'desc'
           }
-        },
-        orderBy: {
-          created_at: 'desc'
-        }
-      });
+        }),
+        prisma.userLicense.count({
+          where: whereClause
+        })
+      ]);
 
       // Get admin settings for configurable values
       const adminSettings = await adminSettingsService.getSettings();
@@ -91,29 +99,43 @@ export class LicenseService {
       const earningCapPercentage = adminSettings.system.earning_cap_percentage;
       
       // Transform data to match API specification for new motor
-      return licenses.map(license => {
+      const transformedLicenses = licenses.map(license => {
         const principalUSDT = Number(license.product.price_usdt);
         const daysGenerated = license.days_generated || 0;
         const accruedUSDT = Number(license.cashback_accum || 0);
         const potentialAccum = Number(license.potential_accum || 0);
+        const totalEarnedUSDT = Number(license.total_earned_usdt || 0);
         const capUSDT = principalUSDT * earningCapPercentage; // Configurable cap
-        const remainingUSDT = Math.max(0, capUSDT - accruedUSDT);
+        const remainingUSDT = Math.max(0, capUSDT - totalEarnedUSDT);
         
         // Calculate if license should be paused (reached cap)
         const shouldPause = accruedUSDT >= capUSDT;
         
         return {
           id: license.id,
+          // CamelCase fields for compatibility
           principalUSDT: principalUSDT.toFixed(6),
-          days_generated: daysGenerated, // 0-20
-          daily_rate: dailyRate, // Configurable daily rate
           accruedUSDT: accruedUSDT.toFixed(6),
-          potentialAccum: potentialAccum.toFixed(6),
-          capUSDT: capUSDT.toFixed(6), // Configurable earning cap
+          capUSDT: capUSDT.toFixed(6),
           remainingUSDT: remainingUSDT.toFixed(6),
-          pause_potential: shouldPause || (license.flags as any)?.pause_potential || false,
           startedAt: license.started_at,
           endsAt: license.ends_at,
+          // Snake_case fields for frontend compatibility
+          principal_usdt: principalUSDT.toFixed(6),
+          accrued_usdt: accruedUSDT.toFixed(6),
+          days_generated: daysGenerated, // 0-25
+          daysGenerated: daysGenerated, // Alias for compatibility
+          daily_rate: dailyRate, // Configurable daily rate
+          total_earned_usdt: totalEarnedUSDT.toFixed(6), // Total accumulated earnings
+          cashback_accum: accruedUSDT.toFixed(6), // Cashback phase accumulation
+          potential_accum: potentialAccum.toFixed(6), // Potential phase accumulation
+          pause_potential: shouldPause || (license.flags as any)?.pause_potential || false,
+          flags: {
+            pause_potential: shouldPause || (license.flags as any)?.pause_potential || false
+          },
+          started_at: license.started_at,
+          ends_at: license.ends_at,
+          created_at: license.created_at,
           status: license.status,
           product: {
             id: license.product.id,
@@ -123,17 +145,27 @@ export class LicenseService {
             badge: license.product.badge,
             target_user: license.product.target_user,
             price_usdt: license.product.price_usdt,
-            duration_days: license.product.duration_days
+            duration_days: license.product.duration_days,
+            daily_rate: license.product.daily_rate
           }
         };
       });
+
+      const totalPages = Math.ceil(total / limit);
+
+      return {
+        licenses: transformedLicenses,
+        total,
+        page,
+        totalPages
+      };
     } catch (error) {
       logger.error('Error getting user licenses: ' + (error as Error).message);
       throw error;
     }
   }
 
-  // Get license earnings history (daily breakdown) for new motor 10% x 20 days
+  // Get license earnings history (daily breakdown) for new motor 8% x 25 days
   async getLicenseEarnings(licenseId: string, userId: string) {
     try {
       // First verify the license belongs to the user
@@ -188,8 +220,8 @@ export class LicenseService {
         }
 
         return {
-          day_index: dayIndex, // 1-20
-          daily_amount: dailyAmount.toFixed(6), // 10% of principal
+          day_index: dayIndex, // 1-25
+          daily_amount: dailyAmount.toFixed(6), // 8% of principal
           amount_usdt: Number(earning.cashback_amount).toFixed(6),
           applied_to_balance: earning.applied_to_balance,
           is_paused: isPaused,
