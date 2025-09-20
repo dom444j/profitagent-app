@@ -1,4 +1,4 @@
-# ProFitAgent - Plataforma de Agentes de Arbitraje Automatizado
+# ProFitAgent - Plataforma de Arbitraje y Surebet Automatizado
 
 ## ✅ Estado del Proyecto
 
