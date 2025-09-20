@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # ProFitAgent - Plataforma de Arbitraje y Surebet Automatizado
 
 ## ✅ Estado del Proyecto
